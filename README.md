@@ -11,6 +11,8 @@ ClaudeHub follows the macOS system language in Turkish, English, French and
 Spanish. Other system languages fall back to English. The product name remains
 **ClaudeHub** in every language.
 
+![ClaudeHub multi-account menu bar preview](assets/claudehub.png)
+
 ## Requirements
 
 - Apple Silicon Mac with macOS 13 or newer
