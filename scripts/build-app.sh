@@ -6,6 +6,7 @@ project_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="ClaudeHub"
 app_version="${CLAUDE_HUB_VERSION:-$(tr -d '[:space:]' < "$project_root/VERSION")}"
 app_path="$project_root/$output_dir/$app_name.app"
+signing_identity="${CLAUDE_HUB_SIGNING_IDENTITY:--}"
 
 cd "$project_root"
 swift build -c release --arch arm64
@@ -38,8 +39,16 @@ cat > "$app_path/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --deep --sign - \
-  --entitlements "$project_root/scripts/entitlements.plist" \
-  "$app_path"
+if [[ "$signing_identity" == "-" ]]; then
+  codesign --force --deep --sign - \
+    --entitlements "$project_root/scripts/entitlements.plist" \
+    "$app_path"
+else
+  codesign --force --deep --options runtime --timestamp \
+    --sign "$signing_identity" \
+    --entitlements "$project_root/scripts/entitlements.plist" \
+    "$app_path"
+fi
+
 codesign --verify --deep --strict --verbose=2 "$app_path"
 echo "$app_path"
