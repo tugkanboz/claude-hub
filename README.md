@@ -28,13 +28,22 @@ Open ClaudeHub, then choose **Accounts → Add Claude Profile…** and select ea
 directory. ClaudeHub stores only the label and directory path in
 `~/Library/Application Support/ClaudeHub/accounts.json`.
 
-## Token renewal
+## Keychain access and token renewal
 
 Claude Code stores credentials for isolated profiles in macOS Keychain.
-ClaudeHub reads them only while requesting usage. Five minutes before an
-access token expires, ClaudeHub gives the existing refresh token and scopes
-back to the installed `claude` CLI. Claude Code performs the exchange and
-saves its own credential. This does not invoke a model or consume plan usage.
+ClaudeHub reads each profile once when the app starts and keeps the credential
+only in memory. The five-minute usage refresh uses that in-memory value, so it
+does not trigger another Keychain password prompt.
+
+On the first launch, macOS can ask once for every Claude profile. Choose
+**Always Allow** to remember the permission for this installed build. Because
+public builds are currently ad-hoc signed, macOS may ask again after replacing
+the app with a new version.
+
+Five minutes before an access token expires, ClaudeHub gives the existing
+refresh token and scopes back to the installed `claude` CLI. Claude Code
+performs the exchange and saves its own credential. ClaudeHub then reloads that
+profile once. This does not invoke a model or consume plan usage.
 
 If Anthropic revokes a refresh token, run `claude auth login` once for that
 profile and click **Refresh Now**.
@@ -55,7 +64,7 @@ and notarization.
 ## Privacy
 
 - ClaudeHub never modifies `~/.claude`.
-- Tokens are not copied into ClaudeHub configuration or logs.
+- Tokens are never written to ClaudeHub configuration or logs; they live only in memory while the app is open.
 - Requests go directly to Anthropic's OAuth usage and profile endpoints.
 - There is no telemetry, advertising or third-party analytics SDK.
 
