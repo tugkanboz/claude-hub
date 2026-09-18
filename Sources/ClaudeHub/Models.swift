@@ -19,7 +19,7 @@ struct Account: Codable, Hashable, Identifiable {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        label = try values.decodeIfPresent(String.self, forKey: .label) ?? "Claude account"
+        label = try values.decodeIfPresent(String.self, forKey: .label) ?? L10n.text(.defaultAccountLabel)
         if let current = try values.decodeIfPresent(String.self, forKey: .configDirectory) {
             configDirectory = current
         } else {
