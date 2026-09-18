@@ -32,6 +32,20 @@ final class ClaudeHubTests: XCTestCase {
         XCTAssertEqual(payload.fiveHour?.utilization, 42.5)
         XCTAssertEqual(payload.sevenDay?.utilization, 10)
     }
+    func testSystemLanguageResolutionAndEnglishFallback() {
+        XCTAssertEqual(AppLanguage.resolve(["tr-TR"]), .tr)
+        XCTAssertEqual(AppLanguage.resolve(["en-US"]), .en)
+        XCTAssertEqual(AppLanguage.resolve(["fr-FR"]), .fr)
+        XCTAssertEqual(AppLanguage.resolve(["es-ES"]), .es)
+        XCTAssertEqual(AppLanguage.resolve(["de-DE"]), .en)
+    }
+
+    func testAllSupportedLanguagesHaveLocalizedMenuText() {
+        XCTAssertEqual(L10n.text(.refreshNow, language: .tr), "Şimdi yenile")
+        XCTAssertEqual(L10n.text(.refreshNow, language: .en), "Refresh Now")
+        XCTAssertEqual(L10n.text(.refreshNow, language: .fr), "Actualiser maintenant")
+        XCTAssertEqual(L10n.text(.refreshNow, language: .es), "Actualizar ahora")
+    }
 }
 
 private final class CredentialLoaderCounter: @unchecked Sendable {
