@@ -18,6 +18,7 @@ Spanish. Other system languages fall back to English. The product name remains
 [**Download the latest ClaudeHub release for macOS**](https://github.com/tugkanboz/claude-hub/releases/latest)
 
 Open the latest release and download the `.dmg` file listed under **Assets**.
+Release builds are signed with a Developer ID certificate and notarized by Apple.
 ClaudeHub currently supports Apple Silicon Macs running macOS 13 or newer.
 
 ## Installation
@@ -26,11 +27,6 @@ ClaudeHub currently supports Apple Silicon Macs running macOS 13 or newer.
 2. Open the disk image and drag **ClaudeHub** into the **Applications** folder.
 3. Launch ClaudeHub from **Applications**.
 4. Choose **Accounts → Add Claude Profile…** and select each isolated Claude Code profile directory.
-
-> **Current test builds:** Until the app is distributed with an Apple Developer ID
-> certificate and notarization, macOS may display a verification warning. If it
-> does, Control-click ClaudeHub in **Applications**, choose **Open**, then confirm
-> **Open**. Future notarized releases will open normally.
 
 ## Requirements
 
@@ -61,9 +57,8 @@ only in memory. The five-minute usage refresh uses that in-memory value, so it
 does not trigger another Keychain password prompt.
 
 On the first launch, macOS can ask once for every Claude profile. Choose
-**Always Allow** to remember the permission for this installed build. Because
-public builds are currently ad-hoc signed, macOS may ask again after replacing
-the app with a new version.
+**Always Allow** to remember the permission for published Developer ID-signed
+builds.
 
 Five minutes before an access token expires, ClaudeHub gives the existing
 refresh token and scopes back to the installed `claude` CLI. Claude Code
@@ -81,10 +76,9 @@ bash scripts/build-app.sh
 bash scripts/package-dmg.sh
 ```
 
-The application is produced at `dist/ClaudeHub.app`. The bundle receives an
-ad-hoc signature and is verified before packaging. Public distribution without
-Gatekeeper warnings additionally requires an Apple Developer ID certificate
-and notarization.
+The application is produced at `dist/ClaudeHub.app`. Local builds receive an
+ad-hoc signature. GitHub release builds are signed with a Developer ID
+certificate, notarized by Apple and verified with Gatekeeper before publishing.
 
 ## Privacy
 
