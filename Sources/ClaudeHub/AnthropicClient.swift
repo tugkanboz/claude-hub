@@ -13,23 +13,43 @@ enum AnthropicClientError: LocalizedError {
 }
 
 struct AnthropicClient {
-    private let credentials = CredentialStore()
+    private let credentials = CredentialCache()
     private let refresher = ClaudeLoginRefresher()
-    private let decoder = JSONDecoder()
     private let refreshLeadTime: Int64 = 5 * 60 * 1_000
 
     func snapshot(for account: Account) async throws -> AccountSnapshot {
-        var credential = try credentials.read(for: account)
+        var credential = try await credentials.read(for: account)
         let now = Int64(Date().timeIntervalSince1970 * 1_000)
+
         if credential.expiresAt > 0, credential.expiresAt <= now + refreshLeadTime {
             try await refresher.renew(account: account, credential: credential)
-            credential = try credentials.read(for: account)
+            credential = try await credentials.reload(for: account)
         }
 
-        let accessToken = credential.accessToken
-        async let usageData = request(path: "/api/oauth/usage", token: accessToken)
-        async let profileData = request(path: "/api/oauth/profile", token: accessToken)
+        do {
+            return try await fetchSnapshot(token: credential.accessToken)
+        } catch AnthropicClientError.http(let status) where status == 401 {
+            // Claude Code may have renewed the profile outside ClaudeHub.
+            // Re-read only after an actual authentication failure, never on
+            // the normal five-minute usage refresh.
+            let latest = try await credentials.reload(for: account)
+            return try await fetchSnapshot(token: latest.accessToken)
+        }
+    }
+
+    func remember(_ credential: OAuthCredential, for account: Account) async {
+        await credentials.remember(credential, for: account)
+    }
+
+    func forget(_ account: Account) async {
+        await credentials.remove(for: account)
+    }
+
+    private func fetchSnapshot(token: String) async throws -> AccountSnapshot {
+        async let usageData = request(path: "/api/oauth/usage", token: token)
+        async let profileData = request(path: "/api/oauth/profile", token: token)
         let (usageBytes, profileBytes) = try await (usageData, profileData)
+        let decoder = JSONDecoder()
         let usage = try decoder.decode(UsagePayload.self, from: usageBytes)
         let profile = try decoder.decode(ProfilePayload.self, from: profileBytes)
         return AccountSnapshot(
