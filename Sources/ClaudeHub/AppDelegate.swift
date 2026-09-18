@@ -12,8 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         accounts = accountStore.load()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "Claude Usage"
-        statusItem.button?.imagePosition = .imageLeading
+        statusItem.button?.title = ""
+        statusItem.button?.imagePosition = .imageOnly
+        statusItem.button?.toolTip = "ClaudeHub"
+        statusItem.button?.setAccessibilityLabel("ClaudeHub")
         statusItem.button?.image = Self.menuIcon()
         rebuildMenu()
         refreshAll()
@@ -32,22 +34,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         if accounts.isEmpty {
-            addDisabled("Henüz hesap eklenmedi", to: menu)
+            addDisabled(L10n.text(.noAccounts), to: menu)
         } else {
             for account in accounts { menu.addItem(accountMenuItem(account)) }
         }
 
         menu.addItem(.separator())
-        let refresh = NSMenuItem(title: "Şimdi yenile", action: #selector(refreshPressed), keyEquivalent: "r")
+        let refresh = NSMenuItem(title: L10n.text(.refreshNow), action: #selector(refreshPressed), keyEquivalent: "r")
         refresh.target = self
         menu.addItem(refresh)
 
-        let accountsItem = NSMenuItem(title: "Hesaplar", action: nil, keyEquivalent: "")
+        let accountsItem = NSMenuItem(title: L10n.text(.accounts), action: nil, keyEquivalent: "")
         accountsItem.submenu = accountManagementMenu()
         menu.addItem(accountsItem)
 
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "ClaudeHub'dan çık", action: #selector(quitPressed), keyEquivalent: "q")
+        let quit = NSMenuItem(title: L10n.text(.quit), action: #selector(quitPressed), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         statusItem.menu = menu
@@ -58,23 +60,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let submenu = NSMenu()
         switch states[account.id] ?? .loading {
         case .loading:
-            addDisabled("Yükleniyor…", to: submenu)
+            addDisabled(L10n.text(.loading), to: submenu)
         case .failed(let message):
-            addDisabled("Hata: \(message)", to: submenu)
+            addDisabled(L10n.format(.error, message), to: submenu)
         case .loaded(let snapshot):
             if let email = snapshot.email { addDisabled(email, to: submenu) }
-            addWindow("5 saat", snapshot.usage.fiveHour, to: submenu)
-            addWindow("7 gün", snapshot.usage.sevenDay, to: submenu)
-            addWindow("7 gün Sonnet", snapshot.usage.sevenDaySonnet, to: submenu)
-            addWindow("7 gün Opus", snapshot.usage.sevenDayOpus, to: submenu)
-            addWindow("OAuth uygulamaları", snapshot.usage.sevenDayOAuthApps, to: submenu)
-            addWindow("Cowork", snapshot.usage.sevenDayCowork, to: submenu)
+            addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: submenu)
+            addWindow(L10n.text(.sevenDay), snapshot.usage.sevenDay, to: submenu)
+            addWindow(L10n.text(.sevenDaySonnet), snapshot.usage.sevenDaySonnet, to: submenu)
+            addWindow(L10n.text(.sevenDayOpus), snapshot.usage.sevenDayOpus, to: submenu)
+            addWindow(L10n.text(.oauthApps), snapshot.usage.sevenDayOAuthApps, to: submenu)
+            addWindow(L10n.text(.cowork), snapshot.usage.sevenDayCowork, to: submenu)
             if let extra = snapshot.usage.extraUsage.flatMap(UsageFormatting.extraUsage) {
                 addDisabled(extra, to: submenu)
             }
             let formatter = DateFormatter()
             formatter.timeStyle = .short
-            addDisabled("Güncellendi: \(formatter.string(from: snapshot.fetchedAt))", to: submenu)
+            addDisabled(L10n.format(.updated, formatter.string(from: snapshot.fetchedAt)), to: submenu)
         }
         item.submenu = submenu
         return item
@@ -82,12 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func accountManagementMenu() -> NSMenu {
         let menu = NSMenu()
-        let add = NSMenuItem(title: "Claude profili ekle…", action: #selector(addAccountPressed), keyEquivalent: "")
+        let add = NSMenuItem(title: L10n.text(.addProfile), action: #selector(addAccountPressed), keyEquivalent: "")
         add.target = self
         menu.addItem(add)
 
         if !accounts.isEmpty {
-            let remove = NSMenuItem(title: "Hesap kaldır", action: nil, keyEquivalent: "")
+            let remove = NSMenuItem(title: L10n.text(.removeAccount), action: nil, keyEquivalent: "")
             let removeMenu = NSMenu()
             for account in accounts {
                 let candidate = NSMenuItem(
@@ -128,8 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func addAccountPressed() {
         let picker = NSOpenPanel()
-        picker.title = "Claude Code profil klasörünü seç"
-        picker.prompt = "Seç"
+        picker.title = L10n.text(.pickerTitle)
+        picker.prompt = L10n.text(.select)
         picker.canChooseDirectories = true
         picker.canChooseFiles = false
         picker.allowsMultipleSelection = false
@@ -139,25 +141,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let path = url.path
         guard FileManager.default.fileExists(atPath: url.appendingPathComponent(".claude.json").path) else {
-            showError("Bu klasörde .claude.json bulunamadı. Önce bu CLAUDE_CONFIG_DIR ile Claude Code'a giriş yap.")
+            showError(L10n.text(.missingClaudeJSON))
             return
         }
         if accounts.contains(where: { $0.configDirectory == path }) {
-            showError("Bu profil zaten ekli.")
+            showError(L10n.text(.profileAlreadyAdded))
             return
         }
 
         let alert = NSAlert()
-        alert.messageText = "Hesap adı"
-        alert.informativeText = "Menüde görünecek kısa adı yaz."
-        alert.addButton(withTitle: "Ekle")
-        alert.addButton(withTitle: "İptal")
+        alert.messageText = L10n.text(.accountName)
+        alert.informativeText = L10n.text(.accountNameHelp)
+        alert.addButton(withTitle: L10n.text(.add))
+        alert.addButton(withTitle: L10n.text(.cancel))
         let field = NSTextField(string: url.lastPathComponent)
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
         alert.accessoryView = field
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let label = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else { showError("Hesap adı boş olamaz."); return }
+        guard !label.isEmpty else { showError(L10n.text(.accountNameEmpty)); return }
 
         let account = Account(label: label, configDirectory: path)
         do {
