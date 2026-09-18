@@ -26,7 +26,7 @@ ClaudeHub currently supports Apple Silicon Macs running macOS 13 or newer.
 1. Download the latest `.dmg` from the [Releases page](https://github.com/tugkanboz/claude-hub/releases/latest).
 2. Open the disk image and drag **ClaudeHub** into the **Applications** folder.
 3. Launch ClaudeHub from **Applications**.
-4. Choose **Accounts → Add Claude Profile…** and select each isolated Claude Code profile directory.
+4. Choose **Accounts → Add Existing Claude Profile…** and select each isolated Claude Code profile directory.
 
 ## Requirements
 
@@ -45,7 +45,7 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account2" claude auth login
 CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account3" claude auth login
 ```
 
-Open ClaudeHub, then choose **Accounts → Add Claude Profile…** and select each
+Open ClaudeHub, then choose **Accounts → Add Existing Claude Profile…** and select each
 directory. ClaudeHub stores only the label and directory path in
 `~/Library/Application Support/ClaudeHub/accounts.json`.
 
