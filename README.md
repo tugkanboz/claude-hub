@@ -3,9 +3,13 @@
 ClaudeHub is a native macOS menu-bar app that displays usage for multiple
 Claude Code subscription profiles in one place.
 
-The menu-bar title stays **Claude Usage**. Each configured profile shows its
-five-hour and weekly utilization, model-specific limits, reset countdowns and
-extra usage.
+The menu bar displays only the ClaudeHub icon. Each configured profile shows
+its five-hour and weekly utilization, model-specific limits, reset countdowns
+and extra usage.
+
+ClaudeHub follows the macOS system language in Turkish, English, French and
+Spanish. Other system languages fall back to English. The product name remains
+**ClaudeHub** in every language.
 
 ## Requirements
 
