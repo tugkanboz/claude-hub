@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.version }}"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "number=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Test
+        run: swift test
+      - name: Build application
+        env:
+          CLAUDE_HUB_VERSION: ${{ steps.version.outputs.number }}
+        run: bash scripts/build-app.sh
+      - name: Package DMG
+        run: bash scripts/package-dmg.sh dist/ClaudeHub.app dist/ClaudeHub-${{ steps.version.outputs.tag }}-macOS-arm64.dmg
+      - name: Checksums
+        working-directory: dist
+        run: shasum -a 256 *.dmg > SHA256SUMS.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            dist/*.dmg dist/SHA256SUMS.txt \
+            --title "ClaudeHub ${{ steps.version.outputs.tag }}" \
+            --generate-notes
