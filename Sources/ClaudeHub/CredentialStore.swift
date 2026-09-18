@@ -9,9 +9,9 @@ enum CredentialStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .keychain(let status):
-            return "Keychain kaydı okunamadı (\(status)). Bu profil Claude Code ile giriş yapmış mı?"
+            return L10n.format(.keychainReadFailed, status)
         case .malformedCredential:
-            return "Claude Code kimlik kaydı beklenen biçimde değil."
+            return L10n.text(.malformedCredential)
         }
     }
 }
