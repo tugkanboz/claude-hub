@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "rewrite/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: macos-14
+    outputs:
+      swift_error: ${{ steps.swift-test.outputs.error_line }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        id: swift-test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          swift test 2>&1 | tee swift-test.log
+          status=$?
+          error_line="$(grep 'error:' swift-test.log | grep -v 'emit-module command failed' | head -n 1 | tr -d '\r' | cut -c1-180)"
+          echo "error_line=$error_line" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Report Swift failure
+        if: steps.swift-test.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo '### Swift compiler output'
+            echo '```text'
+            tail -n 120 swift-test.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Build and verify app bundle
+        run: bash scripts/build-app.sh
+      - name: Package DMG
+        run: bash scripts/package-dmg.sh
+      - name: Verify disk image
+        run: hdiutil verify dist/ClaudeHub-macOS-arm64.dmg
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeHub-independent-macOS-arm64
+          path: dist/ClaudeHub-macOS-arm64.dmg
+          if-no-files-found: error
+
+  report-failure:
+    needs: test-and-package
+    if: always() && needs.test-and-package.result == 'failure'
+    name: "Swift error — ${{ needs.test-and-package.outputs.swift_error }}"
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 1
