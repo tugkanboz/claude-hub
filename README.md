@@ -5,7 +5,7 @@
 <h1 align="center">ClaudeHub</h1>
 
 <p align="center">
-  <strong>All your Claude Code usage. One menu bar.</strong>
+  <strong>Track all of your Claude Code accounts from the macOS menu bar.</strong>
 </p>
 
 <p align="center">
@@ -19,55 +19,62 @@
 
 <p align="center">
   <a href="https://github.com/tugkanboz/claude-hub/releases/latest"><strong>Download for macOS</strong></a>
-  ·
+  &nbsp;|&nbsp;
   <a href="#installation">Installation</a>
-  ·
-  <a href="#build">Build from source</a>
+  &nbsp;|&nbsp;
+  <a href="#build-from-source">Build from source</a>
 </p>
 
-ClaudeHub is a native, lightweight macOS menu-bar app for monitoring multiple
-Claude Code subscription profiles in one place. See five-hour and weekly usage,
-model-specific limits, reset countdowns and extra usage without switching
-accounts.
+ClaudeHub is a small native macOS menu bar app for people who use more than
+one Claude Code subscription. It keeps each Claude Code profile separate and
+shows their usage in a single menu, so you do not need to switch accounts just
+to check the remaining limits.
 
-![ClaudeHub multi-account menu bar preview](assets/claudehub.png?v=2)
+![ClaudeHub showing multiple Claude Code accounts](assets/claudehub.png?v=2)
 
-## Highlights
+## What it shows
 
-- **Multiple accounts** — monitor isolated Claude Code profiles from one menu.
-- **Live limits** — see five-hour, seven-day and model-specific utilization.
-- **Reset countdowns** — know exactly when each usage window becomes available.
-- **Native and lightweight** — built with Swift and AppKit for Apple Silicon.
-- **Private by design** — no telemetry, advertising or third-party analytics.
-- **Automatic renewal** — refreshes normal OAuth sessions through Claude Code.
-- **Localized** — Turkish, English, French and Spanish system-language support.
-- **Trusted distribution** — Developer ID signed and notarized by Apple.
+- **Multiple accounts:** Add as many isolated Claude Code profiles as you need.
+- **Current usage:** Check five-hour, seven-day and model-specific utilization.
+- **Reset times:** See how long remains until each usage window resets.
+- **Extra usage:** View extra usage details when they are enabled for an account.
+- **Automatic refresh:** Usage is refreshed every five minutes.
+- **Automatic token renewal:** Normal OAuth sessions are renewed through the installed Claude Code CLI.
+- **Native macOS interface:** ClaudeHub is written in Swift and AppKit for Apple Silicon.
+- **No tracking:** There is no telemetry, advertising or third-party analytics SDK.
+
+The menu bar itself only shows the ClaudeHub icon. Open it to see the accounts
+you have added and the latest usage information for each one.
 
 ## Download
 
-[**Download the latest ClaudeHub release for macOS**](https://github.com/tugkanboz/claude-hub/releases/latest)
+[**Download the latest ClaudeHub release**](https://github.com/tugkanboz/claude-hub/releases/latest)
 
-Open the latest release and download the `.dmg` file listed under **Assets**.
-Release builds are signed with a Developer ID certificate and notarized by Apple.
+Open the release and download the `.dmg` file under **Assets**. Published builds
+are signed with a Developer ID certificate, notarized by Apple and checked with
+Gatekeeper before release.
+
 ClaudeHub currently supports Apple Silicon Macs running macOS 13 or newer.
 
 ## Installation
 
 1. Download the latest `.dmg` from the [Releases page](https://github.com/tugkanboz/claude-hub/releases/latest).
-2. Open the disk image and drag **ClaudeHub** into the **Applications** folder.
-3. Launch ClaudeHub from **Applications**.
-4. Choose **Accounts → Add Existing Claude Profile…** and select each isolated Claude Code profile directory.
+2. Open the disk image.
+3. Drag **ClaudeHub** into the **Applications** folder.
+4. Start ClaudeHub from **Applications**.
+5. Open **Accounts > Add Existing Claude Profile...** and select each profile directory you prepared.
 
 ## Requirements
 
-- Apple Silicon Mac with macOS 13 or newer
-- Claude Code installed
-- One isolated `CLAUDE_CONFIG_DIR` per Claude account
+- An Apple Silicon Mac
+- macOS 13 or newer
+- Claude Code installed and available through the `claude` command
+- A separate `CLAUDE_CONFIG_DIR` for every Claude account you want to monitor
 
-## Prepare profiles
+## Prepare Claude Code profiles
 
-Log in once for every account. These commands do not change your normal
-`~/.claude` profile:
+ClaudeHub does not create Claude Code accounts or perform the first browser
+login. Create each isolated profile from Terminal with Claude Code:
 
 ```bash
 CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account1" claude auth login
@@ -75,54 +82,85 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account2" claude auth login
 CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account3" claude auth login
 ```
 
-Open ClaudeHub, then choose **Accounts → Add Existing Claude Profile…** and select each
-directory. ClaudeHub stores only the label and directory path in
-`~/Library/Application Support/ClaudeHub/accounts.json`.
+Each command creates its profile directory if it does not already exist and
+opens the Claude login flow. These isolated profiles do not change your normal
+`~/.claude` configuration.
 
-## Keychain access and automatic renewal
+After every account is signed in:
 
-Claude Code stores credentials for isolated profiles in macOS Keychain.
-ClaudeHub reads each profile once when the app starts and keeps the credential
-only in memory. The five-minute usage refresh uses that in-memory value, so it
-does not trigger another Keychain password prompt.
+1. Open ClaudeHub.
+2. Choose **Accounts > Add Existing Claude Profile...**.
+3. Select a directory such as `~/.claude-accounts/account1`.
+4. Enter the label that should appear in the menu.
+5. Repeat for the remaining profiles.
 
-On the first launch, macOS can ask once for every Claude profile. Choose
-**Always Allow** to remember the permission for published Developer ID-signed
-builds.
+ClaudeHub stores only the account label and profile directory path in:
 
-Five minutes before a normal access token expires, ClaudeHub automatically
-gives the existing refresh token and scopes back to the installed `claude`
-CLI. Claude Code performs the exchange and saves its own credential. ClaudeHub
-then reloads that profile. This does not open a browser, invoke a model or
-consume plan usage.
+```text
+~/Library/Application Support/ClaudeHub/accounts.json
+```
+
+## Keychain access
+
+Claude Code stores the credentials for every isolated profile in macOS
+Keychain. ClaudeHub reads each credential when the app starts and keeps it only
+in memory while the app is running.
+
+macOS may ask for permission once for every profile. Enter your Mac password
+and choose **Always Allow** so the published Developer ID-signed app can read
+that profile again after a restart. Choosing **Allow** grants access only for
+the current run and can cause the password prompt to return the next time you
+open ClaudeHub.
+
+The regular five-minute usage refresh uses the credential already held in
+memory. It does not read Keychain again on every refresh.
+
+## Automatic token renewal
+
+Five minutes before a normal access token expires, ClaudeHub passes the
+existing refresh token and scopes to the installed `claude` CLI. Claude Code
+renews the session and writes its updated credential back to its own Keychain
+item. ClaudeHub then reloads that profile.
+
+This process does not open a browser, invoke a model or consume Claude plan
+usage.
 
 ## Reconnect an expired or revoked profile
 
-Manual login is only needed if Anthropic revokes the refresh token, the user
-logs out of Claude Code, or the account otherwise displays an authentication
-error. Use the same profile directory that was originally added to ClaudeHub:
+A manual login is only required when the refresh token has been revoked, the
+account was logged out of Claude Code, or the account displays another
+authentication error.
+
+Run `claude auth login` again with the same profile directory that was
+originally added to ClaudeHub. For example:
 
 ```bash
 CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account2" claude auth login
 ```
 
-Complete the browser login, quit and reopen ClaudeHub so its in-memory
-credential cache is replaced, then click **Refresh Now**. The profile does not
-need to be removed and added again.
+Complete the browser login, quit ClaudeHub and open it again so the in-memory
+credential is replaced. Then choose **Refresh Now**. You do not need to remove
+the profile from ClaudeHub or add it again.
 
 ## After restarting the Mac
 
-ClaudeHub keeps the configured profile names and paths in
-`~/Library/Application Support/ClaudeHub/accounts.json`, while Claude Code
-keeps authentication in macOS Keychain. Restarting or shutting down the Mac
-does not require another browser login.
+Restarting or shutting down the Mac does not require another Claude browser
+login. ClaudeHub keeps the configured profile names and paths in its
+`accounts.json` file, and Claude Code keeps the authentication credentials in
+macOS Keychain.
 
-Open ClaudeHub again after signing in to macOS. To start it automatically,
-add ClaudeHub under **System Settings → General → Login Items**. Profiles that
-were granted **Always Allow** Keychain access should load without another
+Open ClaudeHub again after signing in to macOS. If you want it to start
+automatically, add ClaudeHub under **System Settings > General > Login Items**.
+Profiles granted **Always Allow** Keychain access should load without another
 permission prompt.
 
-## Build
+## Languages
+
+ClaudeHub follows the macOS system language. It currently includes Turkish,
+English, French and Spanish. Unsupported system languages fall back to English.
+The product name remains **ClaudeHub** in every language.
+
+## Build from source
 
 ```bash
 swift test
@@ -130,16 +168,18 @@ bash scripts/build-app.sh
 bash scripts/package-dmg.sh
 ```
 
-The application is produced at `dist/ClaudeHub.app`. Local builds receive an
-ad-hoc signature. GitHub release builds are signed with a Developer ID
-certificate, notarized by Apple and verified with Gatekeeper before publishing.
+The application bundle is written to `dist/ClaudeHub.app`. Local builds receive
+an ad-hoc signature. GitHub release builds use the configured Developer ID
+certificate, are notarized by Apple and are verified with Gatekeeper before
+publishing.
 
 ## Privacy
 
-- ClaudeHub never modifies `~/.claude`.
-- Tokens are never written to ClaudeHub configuration or logs; they live only in memory while the app is open.
-- Requests go directly to Anthropic's OAuth usage and profile endpoints.
-- There is no telemetry, advertising or third-party analytics SDK.
+- ClaudeHub never modifies your normal `~/.claude` configuration.
+- Tokens are not written to ClaudeHub configuration files or logs.
+- Credentials remain in macOS Keychain and in memory while ClaudeHub is open.
+- Usage and profile requests go directly to Anthropic's OAuth endpoints.
+- ClaudeHub has no telemetry, advertising or third-party analytics SDK.
 
 ## License
 
