@@ -6,8 +6,8 @@ enum AnthropicClientError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidResponse: return "Anthropic geçersiz bir yanıt döndürdü."
-        case .http(let status): return "Anthropic isteği HTTP \(status) ile başarısız oldu."
+        case .invalidResponse: return L10n.text(.invalidAnthropicResponse)
+        case .http(let status): return L10n.format(.anthropicHTTPFailed, status)
         }
     }
 }
