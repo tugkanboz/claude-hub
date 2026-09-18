@@ -161,12 +161,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let account = Account(label: label, configDirectory: path)
         do {
-            _ = try CredentialStore().read(for: account)
+            let credential = try CredentialStore().read(for: account)
             accounts.append(account)
             try accountStore.save(accounts)
             states[account.id] = .loading
             rebuildMenu()
-            refreshAll()
+            Task {
+                await client.remember(credential, for: account)
+                refreshAll()
+            }
         } catch {
             showError(error.localizedDescription)
         }
@@ -174,10 +177,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func removeAccountPressed(_ sender: NSMenuItem) {
         guard let rawID = sender.representedObject as? String,
-              let id = UUID(uuidString: rawID)
+              let id = UUID(uuidString: rawID),
+              let account = accounts.first(where: { $0.id == id })
         else { return }
         accounts.removeAll { $0.id == id }
         states[id] = nil
+        Task { await client.forget(account) }
         do { try accountStore.save(accounts) } catch { showError(error.localizedDescription) }
         rebuildMenu()
     }
