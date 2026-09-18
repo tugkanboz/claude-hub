@@ -1,17 +1,47 @@
-# ClaudeHub
+<p align="center">
+  <img src="assets/AppIcon.png" width="128" alt="ClaudeHub app icon">
+</p>
 
-ClaudeHub is a native macOS menu-bar app that displays usage for multiple
-Claude Code subscription profiles in one place.
+<h1 align="center">ClaudeHub</h1>
 
-The menu bar displays only the ClaudeHub icon. Each configured profile shows
-its five-hour and weekly utilization, model-specific limits, reset countdowns
-and extra usage.
+<p align="center">
+  <strong>All your Claude Code usage. One menu bar.</strong>
+</p>
 
-ClaudeHub follows the macOS system language in Turkish, English, French and
-Spanish. Other system languages fall back to English. The product name remains
-**ClaudeHub** in every language.
+<p align="center">
+  <a href="https://github.com/tugkanboz/claude-hub/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/tugkanboz/claude-hub?style=flat-square&color=7c3aed"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-000000?style=flat-square&logo=apple">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-000000?style=flat-square&logo=apple">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-F05138?style=flat-square&logo=swift&logoColor=white">
+  <img alt="Apple notarized" src="https://img.shields.io/badge/Apple-notarized-22c55e?style=flat-square&logo=apple&logoColor=white">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/tugkanboz/claude-hub/releases/latest"><strong>Download for macOS</strong></a>
+  ·
+  <a href="#installation">Installation</a>
+  ·
+  <a href="#build">Build from source</a>
+</p>
+
+ClaudeHub is a native, lightweight macOS menu-bar app for monitoring multiple
+Claude Code subscription profiles in one place. See five-hour and weekly usage,
+model-specific limits, reset countdowns and extra usage without switching
+accounts.
 
 ![ClaudeHub multi-account menu bar preview](assets/claudehub.png?v=2)
+
+## Highlights
+
+- **Multiple accounts** — monitor isolated Claude Code profiles from one menu.
+- **Live limits** — see five-hour, seven-day and model-specific utilization.
+- **Reset countdowns** — know exactly when each usage window becomes available.
+- **Native and lightweight** — built with Swift and AppKit for Apple Silicon.
+- **Private by design** — no telemetry, advertising or third-party analytics.
+- **Automatic renewal** — refreshes normal OAuth sessions through Claude Code.
+- **Localized** — Turkish, English, French and Spanish system-language support.
+- **Trusted distribution** — Developer ID signed and notarized by Apple.
 
 ## Download
 
