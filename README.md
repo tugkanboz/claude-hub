@@ -49,7 +49,7 @@ Open ClaudeHub, then choose **Accounts → Add Claude Profile…** and select ea
 directory. ClaudeHub stores only the label and directory path in
 `~/Library/Application Support/ClaudeHub/accounts.json`.
 
-## Keychain access and token renewal
+## Keychain access and automatic renewal
 
 Claude Code stores credentials for isolated profiles in macOS Keychain.
 ClaudeHub reads each profile once when the app starts and keeps the credential
@@ -60,13 +60,37 @@ On the first launch, macOS can ask once for every Claude profile. Choose
 **Always Allow** to remember the permission for published Developer ID-signed
 builds.
 
-Five minutes before an access token expires, ClaudeHub gives the existing
-refresh token and scopes back to the installed `claude` CLI. Claude Code
-performs the exchange and saves its own credential. ClaudeHub then reloads that
-profile once. This does not invoke a model or consume plan usage.
+Five minutes before a normal access token expires, ClaudeHub automatically
+gives the existing refresh token and scopes back to the installed `claude`
+CLI. Claude Code performs the exchange and saves its own credential. ClaudeHub
+then reloads that profile. This does not open a browser, invoke a model or
+consume plan usage.
 
-If Anthropic revokes a refresh token, run `claude auth login` once for that
-profile and click **Refresh Now**.
+## Reconnect an expired or revoked profile
+
+Manual login is only needed if Anthropic revokes the refresh token, the user
+logs out of Claude Code, or the account otherwise displays an authentication
+error. Use the same profile directory that was originally added to ClaudeHub:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account2" claude auth login
+```
+
+Complete the browser login, quit and reopen ClaudeHub so its in-memory
+credential cache is replaced, then click **Refresh Now**. The profile does not
+need to be removed and added again.
+
+## After restarting the Mac
+
+ClaudeHub keeps the configured profile names and paths in
+`~/Library/Application Support/ClaudeHub/accounts.json`, while Claude Code
+keeps authentication in macOS Keychain. Restarting or shutting down the Mac
+does not require another browser login.
+
+Open ClaudeHub again after signing in to macOS. To start it automatically,
+add ClaudeHub under **System Settings → General → Login Items**. Profiles that
+were granted **Always Allow** Keychain access should load without another
+permission prompt.
 
 ## Build
 
