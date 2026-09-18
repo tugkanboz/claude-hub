@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     tags: ["v*"]
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -25,10 +24,8 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             tag="${{ inputs.version }}"
-          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            tag="$GITHUB_REF_NAME"
           else
-            tag="v0.2.0"
+            tag="$GITHUB_REF_NAME"
           fi
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
