@@ -13,6 +13,25 @@ Spanish. Other system languages fall back to English. The product name remains
 
 ![ClaudeHub multi-account menu bar preview](assets/claudehub.png?v=2)
 
+## Download
+
+[**Download the latest ClaudeHub release for macOS**](https://github.com/tugkanboz/claude-hub/releases/latest)
+
+Open the latest release and download the `.dmg` file listed under **Assets**.
+ClaudeHub currently supports Apple Silicon Macs running macOS 13 or newer.
+
+## Installation
+
+1. Download the latest `.dmg` from the [Releases page](https://github.com/tugkanboz/claude-hub/releases/latest).
+2. Open the disk image and drag **ClaudeHub** into the **Applications** folder.
+3. Launch ClaudeHub from **Applications**.
+4. Choose **Accounts → Add Claude Profile…** and select each isolated Claude Code profile directory.
+
+> **Current test builds:** Until the app is distributed with an Apple Developer ID
+> certificate and notarization, macOS may display a verification warning. If it
+> does, Control-click ClaudeHub in **Applications**, choose **Open**, then confirm
+> **Open**. Future notarized releases will open normally.
+
 ## Requirements
 
 - Apple Silicon Mac with macOS 13 or newer
