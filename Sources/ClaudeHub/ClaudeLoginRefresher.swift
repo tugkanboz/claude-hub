@@ -9,13 +9,13 @@ enum LoginRefreshError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingRefreshToken:
-            return "Refresh token yok; bu profil için bir kez claude auth login çalıştır."
+            return L10n.text(.missingRefreshToken)
         case .missingScopes:
-            return "OAuth scope bilgisi yok; bu profil için bir kez claude auth login çalıştır."
+            return L10n.text(.missingScopes)
         case .cliNotFound:
-            return "Claude Code bulunamadı. Claude Code'u kurup ClaudeHub'ı yeniden aç."
+            return L10n.text(.cliNotFound)
         case .failed:
-            return "Claude Code oturumu yenileyemedi; bu profil için bir kez claude auth login çalıştır."
+            return L10n.text(.loginRefreshFailed)
         }
     }
 }
