@@ -4,7 +4,7 @@ set -euo pipefail
 output_dir="${1:-dist}"
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="ClaudeHub"
-app_version="${CLAUDE_HUB_VERSION:-0.2.0}"
+app_version="${CLAUDE_HUB_VERSION:-0.2.1}"
 app_path="$project_root/$output_dir/$app_name.app"
 
 cd "$project_root"
