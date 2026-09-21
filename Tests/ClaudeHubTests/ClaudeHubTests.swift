@@ -21,7 +21,7 @@ final class ClaudeHubTests: XCTestCase {
         XCTAssertEqual(first.accessToken, second.accessToken)
         XCTAssertEqual(counter.count, 1)
 
-        await cache.remove(for: account)
+        try await cache.remove(for: account)
         _ = try await cache.read(for: account)
         XCTAssertEqual(counter.count, 2)
     }

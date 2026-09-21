@@ -43,28 +43,79 @@ struct CredentialStore {
     }
 }
 
-/// Keeps Claude Code credentials in memory for the lifetime of ClaudeHub.
-///
-/// macOS may require user approval whenever an app reads another application's
-/// Keychain item. Usage refreshes happen every five minutes, so reading the
-/// Keychain on every refresh would repeatedly show that prompt. This cache
-/// limits normal Keychain access to once per profile per app launch. A reload
-/// only happens after Claude Code renews a token or an API request reports that
-/// the cached access token is no longer valid.
+struct CredentialPersistence: Sendable {
+    var read: @Sendable (Account) throws -> OAuthCredential?
+    var write: @Sendable (OAuthCredential, Account) throws -> Void
+    var remove: @Sendable (Account) throws -> Void
+
+    static let keychain = CredentialPersistence(
+        read: { try HubCredentialStore().read(for: $0) },
+        write: { try HubCredentialStore().write($0, for: $1) },
+        remove: { try HubCredentialStore().remove(for: $0) }
+    )
+}
+
+struct HubCredentialStore {
+    static let service = "com.tugkanboz.claudehub.credentials"
+
+    private func query(for account: Account) -> [CFString: Any] {
+        [kSecClass: kSecClassGenericPassword, kSecAttrService: Self.service,
+         kSecAttrAccount: account.id.uuidString]
+    }
+
+    func read(for account: Account) throws -> OAuthCredential? {
+        var query = query(for: account)
+        query[kSecReturnData] = true
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw CredentialStoreError.keychain(status) }
+        guard let data = item as? Data else { throw CredentialStoreError.malformedCredential }
+        return try JSONDecoder().decode(OAuthCredential.self, from: data)
+    }
+
+    func write(_ credential: OAuthCredential, for account: Account) throws {
+        let data = try JSONEncoder().encode(credential)
+        let query = query(for: account)
+        var status = SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query
+            item[kSecValueData] = data
+            item[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            status = SecItemAdd(item as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { throw CredentialStoreError.keychain(status) }
+    }
+
+    func remove(for account: Account) throws {
+        let status = SecItemDelete(query(for: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw CredentialStoreError.keychain(status)
+        }
+    }
+}
+
 actor CredentialCache {
     typealias Loader = @Sendable (Account) throws -> OAuthCredential
 
     private let loader: Loader
-    private var values: [String: OAuthCredential] = [:]
+    private let persistence: CredentialPersistence?
+    private var values: [UUID: OAuthCredential] = [:]
 
     init(loader: @escaping Loader = { account in
         try CredentialStore().read(for: account)
-    }) {
+    }, persistence: CredentialPersistence? = nil) {
         self.loader = loader
+        self.persistence = persistence
     }
 
     func read(for account: Account) throws -> OAuthCredential {
-        if let credential = values[account.configDirectory] {
+        if let credential = values[account.id] {
+            return credential
+        }
+        if let credential = try persistence?.read(account) {
+            values[account.id] = credential
             return credential
         }
         return try reload(for: account)
@@ -72,15 +123,19 @@ actor CredentialCache {
 
     func reload(for account: Account) throws -> OAuthCredential {
         let credential = try loader(account)
-        values[account.configDirectory] = credential
+        remember(credential, for: account)
         return credential
     }
 
     func remember(_ credential: OAuthCredential, for account: Account) {
-        values[account.configDirectory] = credential
+        values[account.id] = credential
+        do { try persistence?.write(credential, account) } catch {
+            AppLogger.write("[warn] Could not persist ClaudeHub credential; keeping it in memory")
+        }
     }
 
-    func remove(for account: Account) {
-        values[account.configDirectory] = nil
+    func remove(for account: Account) throws {
+        values[account.id] = nil
+        try persistence?.remove(account)
     }
 }

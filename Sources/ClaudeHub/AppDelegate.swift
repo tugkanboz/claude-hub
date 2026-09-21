@@ -71,8 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             addDisabled(L10n.format(.error, message), to: submenu)
         case .loaded(let snapshot):
             if let email = snapshot.email { addDisabled(email, to: submenu) }
-            if let expiry = snapshot.refreshTokenExpiresAt,
-               expiry > 0, Double(expiry) / 1_000 - Date().timeIntervalSince1970 < 5 * 86_400 {
+            if OAuthCredential.needsRefreshTokenWarning(expiresAt: snapshot.refreshTokenExpiresAt) {
                 addDisabled(L10n.text(.refreshTokenExpiring), to: submenu)
             }
             addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: submenu)
@@ -100,6 +99,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(add)
 
         if !accounts.isEmpty {
+            let reconnect = NSMenuItem(title: L10n.text(.reconnectProfile), action: nil, keyEquivalent: "")
+            let reconnectMenu = NSMenu()
+            for account in accounts {
+                let candidate = NSMenuItem(title: account.label, action: #selector(reconnectAccountPressed(_:)), keyEquivalent: "")
+                candidate.target = self
+                candidate.representedObject = account.id.uuidString
+                reconnectMenu.addItem(candidate)
+            }
+            reconnect.submenu = reconnectMenu
+            menu.addItem(reconnect)
             let remove = NSMenuItem(title: L10n.text(.removeAccount), action: nil, keyEquivalent: "")
             let removeMenu = NSMenu()
             for account in accounts {
@@ -129,6 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for account in accounts { states[account.id] = .loading }
         rebuildMenu()
         refreshTask = Task {
+            guard !Task.isCancelled else { return }
+            await client.configure(accounts: requestedAccounts)
+            guard !Task.isCancelled else { return }
             await withTaskGroup(of: (UUID, AccountState).self) { group in
                 for account in requestedAccounts {
                     group.addTask { [client] in
@@ -223,13 +235,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         accounts = updated
         states[id] = nil
-        Task { await client.forget(account) }
+        Task {
+            do { try await client.forget(account) } catch {
+                showError(L10n.text(.credentialCleanupFailed))
+            }
+        }
         refreshAll()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         refreshTask?.cancel()
         refreshTimer?.invalidate()
+    }
+
+    @objc private func reconnectAccountPressed(_ sender: NSMenuItem) {
+        guard let rawID = sender.representedObject as? String,
+              let id = UUID(uuidString: rawID),
+              let account = accounts.first(where: { $0.id == id }) else { return }
+        Task {
+            do {
+                try await client.reconnect(account)
+                refreshAll()
+            } catch is CancellationError { } catch {
+                showError(error.localizedDescription)
+            }
+        }
     }
 
     @objc private func quitPressed() { NSApplication.shared.terminate(nil) }

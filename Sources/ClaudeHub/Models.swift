@@ -49,8 +49,12 @@ struct OAuthCredential: Codable {
     var rateLimitTier: String? = nil
 
     func needsRefreshTokenWarning(at date: Date = Date()) -> Bool {
-        guard let refreshTokenExpiresAt, refreshTokenExpiresAt > 0 else { return false }
-        return Double(refreshTokenExpiresAt) / 1_000 - date.timeIntervalSince1970 < 5 * 86_400
+        Self.needsRefreshTokenWarning(expiresAt: refreshTokenExpiresAt, at: date)
+    }
+
+    static func needsRefreshTokenWarning(expiresAt: Int64?, at date: Date = Date()) -> Bool {
+        guard let expiresAt, expiresAt > 0 else { return false }
+        return Double(expiresAt) / 1_000 - date.timeIntervalSince1970 < 5 * 86_400
     }
 }
 

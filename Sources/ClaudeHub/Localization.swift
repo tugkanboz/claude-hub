@@ -36,6 +36,7 @@ enum L10nKey {
     case accountStoreUnavailable
     case sessionExpired, refreshTokenExpiring
     case confirmRemoveAccount, removeAccountHelp
+    case reconnectProfile, credentialCleanupFailed
 }
 
 enum L10n {
@@ -63,6 +64,8 @@ enum L10n {
 
     private static let translations: [AppLanguage: [L10nKey: String]] = [
         .tr: [
+            .reconnectProfile: "Profili yeniden bağla",
+            .credentialCleanupFailed: "Hesap kaldırıldı ancak ClaudeHub'ın Keychain kopyası silinemedi. Keychain Erişimi'nde com.tugkanboz.claudehub.credentials kaydını kontrol et. Claude Code kaydı değiştirilmedi.",
             .confirmRemoveAccount: "%@ kaldırılsın mı?",
             .removeAccountHelp: "Hesap ClaudeHub'dan kaldırılacak. Claude Code profil klasörü ve oturumu silinmez.",
             .sessionExpired: "Oturum süresi doldu. Bu profilin CLAUDE_CONFIG_DIR değeriyle claude auth login çalıştır, ardından yeniden bağla.",
@@ -109,6 +112,8 @@ enum L10n {
             .anthropicHTTPFailed: "Anthropic isteği HTTP %d ile başarısız oldu.",
         ],
         .en: [
+            .reconnectProfile: "Reconnect Profile",
+            .credentialCleanupFailed: "The account was removed, but its ClaudeHub Keychain copy could not be deleted. Check com.tugkanboz.claudehub.credentials in Keychain Access. The Claude Code item was not changed.",
             .confirmRemoveAccount: "Remove %@?",
             .removeAccountHelp: "The account will be removed from ClaudeHub. Its Claude Code profile folder and session will not be deleted.",
             .sessionExpired: "Session expired. Run claude auth login with this profile’s CLAUDE_CONFIG_DIR, then reconnect.",
@@ -155,6 +160,8 @@ enum L10n {
             .anthropicHTTPFailed: "The Anthropic request failed with HTTP %d.",
         ],
         .fr: [
+            .reconnectProfile: "Reconnecter le profil",
+            .credentialCleanupFailed: "Le compte a été retiré, mais sa copie ClaudeHub n’a pas pu être supprimée du trousseau. Vérifiez com.tugkanboz.claudehub.credentials dans Trousseaux d’accès. L’élément Claude Code n’a pas été modifié.",
             .confirmRemoveAccount: "Supprimer %@ ?",
             .removeAccountHelp: "Le compte sera retiré de ClaudeHub. Son dossier de profil et sa session Claude Code ne seront pas supprimés.",
             .sessionExpired: "Session expirée. Exécutez claude auth login avec le CLAUDE_CONFIG_DIR de ce profil, puis reconnectez-le.",
@@ -201,6 +208,8 @@ enum L10n {
             .anthropicHTTPFailed: "La requête Anthropic a échoué avec le code HTTP %d.",
         ],
         .es: [
+            .reconnectProfile: "Reconectar perfil",
+            .credentialCleanupFailed: "La cuenta se eliminó, pero no se pudo borrar su copia de ClaudeHub del llavero. Revisa com.tugkanboz.claudehub.credentials en Acceso a Llaveros. No se modificó el elemento de Claude Code.",
             .confirmRemoveAccount: "¿Eliminar %@?",
             .removeAccountHelp: "La cuenta se eliminará de ClaudeHub. No se borrarán su carpeta de perfil ni su sesión de Claude Code.",
             .sessionExpired: "La sesión ha caducado. Ejecuta claude auth login con el CLAUDE_CONFIG_DIR de este perfil y vuelve a conectarlo.",

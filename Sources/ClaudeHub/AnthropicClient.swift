@@ -14,44 +14,56 @@ enum AnthropicClientError: LocalizedError {
 }
 
 struct AnthropicClient {
-    private let credentials = CredentialCache()
-    private let refresher = ClaudeLoginRefresher()
-    private let refreshLeadTime: Int64 = 5 * 60 * 1_000
+    typealias Fetch = @Sendable (OAuthCredential) async throws -> AccountSnapshot
+    private let sessions: SessionCoordinator
+    private let fetch: Fetch
+
+    init(sessions: SessionCoordinator = SessionCoordinator(cache: CredentialCache(persistence: .keychain)),
+         fetch: @escaping Fetch = { try await Self.fetchSnapshot(credential: $0) }) {
+        self.sessions = sessions
+        self.fetch = fetch
+    }
+
+    func configure(accounts: [Account]) async { await sessions.configure(accounts) }
 
     func snapshot(for account: Account) async throws -> AccountSnapshot {
-        var credential = try await credentials.read(for: account)
-        let now = Int64(Date().timeIntervalSince1970 * 1_000)
-
-        if credential.expiresAt > 0, credential.expiresAt <= now + refreshLeadTime {
-            do {
-                try await refresher.renew(account: account, credential: credential)
-                credential = try await credentials.reload(for: account)
-            } catch {
-                try Task.checkCancellation()
-                AppLogger.write("[warn] Session renewal failed; attempting the cached access token")
-            }
-        }
-
+        try Task.checkCancellation()
+        let credential = try await sessions.credential(for: account)
         do {
-            return try await fetchSnapshot(credential: credential)
+            return try await fetch(credential)
         } catch AnthropicClientError.http(let status) where status == 401 {
-            // Claude Code may have renewed the profile outside ClaudeHub.
-            // Re-read only after an actual authentication failure, never on
-            // the normal five-minute usage refresh.
-            let latest = try await credentials.reload(for: account)
-            return try await fetchSnapshot(credential: latest)
+            try Task.checkCancellation()
+            let latest: OAuthCredential
+            do { latest = try await sessions.reload(account) } catch {
+                try Task.checkCancellation()
+                AppLogger.write("[warn] Could not reload credentials after HTTP 401")
+                throw AnthropicClientError.http(401)
+            }
+            do { return try await fetch(latest) } catch AnthropicClientError.http(401) {
+                try Task.checkCancellation()
+                let renewed: OAuthCredential
+                do { renewed = try await sessions.renew(account) } catch {
+                    try Task.checkCancellation()
+                    AppLogger.write("[warn] Could not renew credentials after HTTP 401")
+                    throw AnthropicClientError.http(401)
+                }
+                try Task.checkCancellation()
+                return try await fetch(renewed)
+            }
         }
     }
 
     func remember(_ credential: OAuthCredential, for account: Account) async {
-        await credentials.remember(credential, for: account)
+        await sessions.remember(credential, for: account)
     }
 
-    func forget(_ account: Account) async {
-        await credentials.remove(for: account)
+    func forget(_ account: Account) async throws {
+        try await sessions.forget(account)
     }
 
-    private func fetchSnapshot(credential: OAuthCredential) async throws -> AccountSnapshot {
+    func reconnect(_ account: Account) async throws { try await sessions.reconnect(account) }
+
+    private static func fetchSnapshot(credential: OAuthCredential) async throws -> AccountSnapshot {
         let token = credential.accessToken
         async let usageData = request(path: "/api/oauth/usage", token: token)
         async let profileData = request(path: "/api/oauth/profile", token: token)
@@ -68,7 +80,7 @@ struct AnthropicClient {
         )
     }
 
-    private func request(path: String, token: String) async throws -> Data {
+    private static func request(path: String, token: String) async throws -> Data {
         guard let url = URL(string: "https://api.anthropic.com\(path)") else {
             throw AnthropicClientError.invalidResponse
         }
