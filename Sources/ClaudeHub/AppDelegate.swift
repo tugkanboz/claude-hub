@@ -8,9 +8,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var states: [UUID: AccountState] = [:]
     private var statusItem: NSStatusItem!
     private var refreshTimer: Timer?
+    private var accountStoreAvailable = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        accounts = accountStore.load()
+        do { accounts = try accountStore.load() } catch {
+            accountStoreAvailable = false
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = ""
         statusItem.button?.imagePosition = .imageOnly
@@ -18,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.setAccessibilityLabel("ClaudeHub")
         statusItem.button?.image = Self.menuIcon()
         rebuildMenu()
+        if !accountStoreAvailable { showError(L10n.text(.accountStoreUnavailable)) }
         refreshAll()
         refreshTimer = Timer.scheduledTimer(
             timeInterval: 300,
@@ -86,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let add = NSMenuItem(title: L10n.text(.addProfile), action: #selector(addAccountPressed), keyEquivalent: "")
         add.target = self
+        add.isEnabled = accountStoreAvailable
         menu.addItem(add)
 
         if !accounts.isEmpty {
@@ -129,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func addAccountPressed() {
+        guard accountStoreAvailable else { return }
         let picker = NSOpenPanel()
         picker.title = L10n.text(.pickerTitle)
         picker.prompt = L10n.text(.select)
@@ -164,8 +170,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let account = Account(label: label, configDirectory: path)
         do {
             let credential = try CredentialStore().read(for: account)
-            accounts.append(account)
-            try accountStore.save(accounts)
+            let updated = accounts + [account]
+            try accountStore.save(updated)
+            accounts = updated
             states[account.id] = .loading
             rebuildMenu()
             Task {
@@ -182,10 +189,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id })
         else { return }
-        accounts.removeAll { $0.id == id }
+        let updated = accounts.filter { $0.id != id }
+        do { try accountStore.save(updated) } catch {
+            showError(error.localizedDescription)
+            return
+        }
+        accounts = updated
         states[id] = nil
         Task { await client.forget(account) }
-        do { try accountStore.save(accounts) } catch { showError(error.localizedDescription) }
         rebuildMenu()
     }
 

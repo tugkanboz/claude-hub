@@ -33,6 +33,7 @@ enum L10nKey {
     case keychainReadFailed, malformedCredential
     case missingRefreshToken, missingScopes, cliNotFound, loginRefreshFailed
     case invalidAnthropicResponse, anthropicHTTPFailed
+    case accountStoreUnavailable
 }
 
 enum L10n {
@@ -60,6 +61,7 @@ enum L10n {
 
     private static let translations: [AppLanguage: [L10nKey: String]] = [
         .tr: [
+            .accountStoreUnavailable: "Hesap dosyası okunamadı veya kaydedilemedi. Mevcut dosya korundu; bozuk JSON için .bak yedeği oluşturulmaya çalışıldı. accounts.json dosyasını kontrol edip uygulamayı yeniden aç. Hesap değişiklikleri devre dışı.",
             .noAccounts: "Henüz hesap eklenmedi",
             .refreshNow: "Şimdi yenile",
             .accounts: "Hesaplar",
@@ -101,6 +103,7 @@ enum L10n {
             .anthropicHTTPFailed: "Anthropic isteği HTTP %d ile başarısız oldu.",
         ],
         .en: [
+            .accountStoreUnavailable: "The account file could not be read or saved. The existing file was preserved; a .bak backup was attempted for invalid JSON. Check accounts.json and restart the app. Account changes are disabled.",
             .noAccounts: "No accounts added yet",
             .refreshNow: "Refresh Now",
             .accounts: "Accounts",
@@ -142,6 +145,7 @@ enum L10n {
             .anthropicHTTPFailed: "The Anthropic request failed with HTTP %d.",
         ],
         .fr: [
+            .accountStoreUnavailable: "Impossible de lire ou enregistrer les comptes. Le fichier existant est conservé ; une sauvegarde .bak a été tentée pour le JSON invalide. Vérifiez accounts.json et relancez l’application. Les modifications sont désactivées.",
             .noAccounts: "Aucun compte ajouté",
             .refreshNow: "Actualiser maintenant",
             .accounts: "Comptes",
@@ -183,6 +187,7 @@ enum L10n {
             .anthropicHTTPFailed: "La requête Anthropic a échoué avec le code HTTP %d.",
         ],
         .es: [
+            .accountStoreUnavailable: "No se pudo leer o guardar el archivo de cuentas. Se conservó el archivo existente y se intentó crear una copia .bak del JSON inválido. Revisa accounts.json y reinicia la app. Los cambios están desactivados.",
             .noAccounts: "Aún no se han añadido cuentas",
             .refreshNow: "Actualizar ahora",
             .accounts: "Cuentas",
