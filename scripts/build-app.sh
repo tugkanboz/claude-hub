@@ -15,7 +15,8 @@ binary_dir="$(swift build -c release --arch arm64 --show-bin-path)"
 rm -rf "$app_path"
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 cp "$binary_dir/$app_name" "$app_path/Contents/MacOS/$app_name"
-cp "$project_root/assets/AppIcon.png" "$app_path/Contents/Resources/AppIcon.png"
+bash "$project_root/scripts/build-icons.sh"
+cp "$project_root/dist/AppIcon.icns" "$app_path/Contents/Resources/AppIcon.icns"
 
 cat > "$app_path/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,7 +26,7 @@ cat > "$app_path/Contents/Info.plist" <<PLIST
   <key>CFBundleDevelopmentRegion</key><string>tr</string>
   <key>CFBundleDisplayName</key><string>ClaudeHub</string>
   <key>CFBundleExecutable</key><string>ClaudeHub</string>
-  <key>CFBundleIconFile</key><string>AppIcon.png</string>
+  <key>CFBundleIconFile</key><string>AppIcon.icns</string>
   <key>CFBundleIdentifier</key><string>com.tugkanboz.claudehub</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>ClaudeHub</string>

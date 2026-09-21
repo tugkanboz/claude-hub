@@ -35,6 +35,7 @@ enum L10nKey {
     case invalidAnthropicResponse, anthropicHTTPFailed
     case accountStoreUnavailable
     case sessionExpired, refreshTokenExpiring
+    case confirmRemoveAccount, removeAccountHelp
 }
 
 enum L10n {
@@ -62,6 +63,8 @@ enum L10n {
 
     private static let translations: [AppLanguage: [L10nKey: String]] = [
         .tr: [
+            .confirmRemoveAccount: "%@ kaldırılsın mı?",
+            .removeAccountHelp: "Hesap ClaudeHub'dan kaldırılacak. Claude Code profil klasörü ve oturumu silinmez.",
             .sessionExpired: "Oturum süresi doldu. Bu profilin CLAUDE_CONFIG_DIR değeriyle claude auth login çalıştır, ardından yeniden bağla.",
             .refreshTokenExpiring: "Oturum yenileme süresi dolmak üzere veya doldu. Bu profil için tekrar giriş yap.",
             .accountStoreUnavailable: "Hesap dosyası okunamadı veya kaydedilemedi. Mevcut dosya korundu; bozuk JSON için .bak yedeği oluşturulmaya çalışıldı. accounts.json dosyasını kontrol edip uygulamayı yeniden aç. Hesap değişiklikleri devre dışı.",
@@ -106,6 +109,8 @@ enum L10n {
             .anthropicHTTPFailed: "Anthropic isteği HTTP %d ile başarısız oldu.",
         ],
         .en: [
+            .confirmRemoveAccount: "Remove %@?",
+            .removeAccountHelp: "The account will be removed from ClaudeHub. Its Claude Code profile folder and session will not be deleted.",
             .sessionExpired: "Session expired. Run claude auth login with this profile’s CLAUDE_CONFIG_DIR, then reconnect.",
             .refreshTokenExpiring: "Session renewal expires soon or has expired. Sign in again for this profile.",
             .accountStoreUnavailable: "The account file could not be read or saved. The existing file was preserved; a .bak backup was attempted for invalid JSON. Check accounts.json and restart the app. Account changes are disabled.",
@@ -150,6 +155,8 @@ enum L10n {
             .anthropicHTTPFailed: "The Anthropic request failed with HTTP %d.",
         ],
         .fr: [
+            .confirmRemoveAccount: "Supprimer %@ ?",
+            .removeAccountHelp: "Le compte sera retiré de ClaudeHub. Son dossier de profil et sa session Claude Code ne seront pas supprimés.",
             .sessionExpired: "Session expirée. Exécutez claude auth login avec le CLAUDE_CONFIG_DIR de ce profil, puis reconnectez-le.",
             .refreshTokenExpiring: "Le renouvellement de session expire bientôt ou a expiré. Reconnectez-vous à ce profil.",
             .accountStoreUnavailable: "Impossible de lire ou enregistrer les comptes. Le fichier existant est conservé ; une sauvegarde .bak a été tentée pour le JSON invalide. Vérifiez accounts.json et relancez l’application. Les modifications sont désactivées.",
@@ -194,6 +201,8 @@ enum L10n {
             .anthropicHTTPFailed: "La requête Anthropic a échoué avec le code HTTP %d.",
         ],
         .es: [
+            .confirmRemoveAccount: "¿Eliminar %@?",
+            .removeAccountHelp: "La cuenta se eliminará de ClaudeHub. No se borrarán su carpeta de perfil ni su sesión de Claude Code.",
             .sessionExpired: "La sesión ha caducado. Ejecuta claude auth login con el CLAUDE_CONFIG_DIR de este perfil y vuelve a conectarlo.",
             .refreshTokenExpiring: "La renovación de sesión caduca pronto o ya caducó. Inicia sesión de nuevo en este perfil.",
             .accountStoreUnavailable: "No se pudo leer o guardar el archivo de cuentas. Se conservó el archivo existente y se intentó crear una copia .bak del JSON inválido. Revisa accounts.json y reinicia la app. Los cambios están desactivados.",

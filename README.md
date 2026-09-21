@@ -12,7 +12,7 @@
   <a href="https://github.com/tugkanboz/claude-hub/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/tugkanboz/claude-hub?style=flat-square&color=7c3aed"></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-000000?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-000000?style=flat-square&logo=apple">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-F05138?style=flat-square&logo=swift&logoColor=white">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10%2B-F05138?style=flat-square&logo=swift&logoColor=white">
   <img alt="Apple notarized" src="https://img.shields.io/badge/Apple-notarized-22c55e?style=flat-square&logo=apple&logoColor=white">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
 </p>

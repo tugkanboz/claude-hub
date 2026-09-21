@@ -210,6 +210,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id })
         else { return }
+        let confirmation = NSAlert()
+        confirmation.messageText = L10n.format(.confirmRemoveAccount, account.label)
+        confirmation.informativeText = L10n.text(.removeAccountHelp)
+        confirmation.addButton(withTitle: L10n.text(.cancel))
+        confirmation.addButton(withTitle: L10n.text(.removeAccount))
+        guard confirmation.runModal() == .alertSecondButtonReturn else { return }
         let updated = accounts.filter { $0.id != id }
         do { try accountStore.save(updated) } catch {
             showError(error.localizedDescription)
