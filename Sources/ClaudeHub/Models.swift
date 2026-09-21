@@ -39,11 +39,19 @@ struct OAuthEnvelope: Decodable {
     let claudeAiOauth: OAuthCredential
 }
 
-struct OAuthCredential: Decodable {
+struct OAuthCredential: Codable {
     let accessToken: String
     let refreshToken: String?
     let expiresAt: Int64
     let scopes: [String]?
+    var refreshTokenExpiresAt: Int64? = nil
+    var subscriptionType: String? = nil
+    var rateLimitTier: String? = nil
+
+    func needsRefreshTokenWarning(at date: Date = Date()) -> Bool {
+        guard let refreshTokenExpiresAt, refreshTokenExpiresAt > 0 else { return false }
+        return Double(refreshTokenExpiresAt) / 1_000 - date.timeIntervalSince1970 < 5 * 86_400
+    }
 }
 
 struct UsageWindow: Decodable, Equatable {
@@ -103,6 +111,7 @@ struct AccountSnapshot {
     let organizationID: String?
     let usage: UsagePayload
     let fetchedAt: Date
+    var refreshTokenExpiresAt: Int64? = nil
 }
 
 enum AccountState {

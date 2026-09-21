@@ -7,6 +7,7 @@ enum AnthropicClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return L10n.text(.invalidAnthropicResponse)
+        case .http(401): return L10n.text(.sessionExpired)
         case .http(let status): return L10n.format(.anthropicHTTPFailed, status)
         }
     }
@@ -22,18 +23,23 @@ struct AnthropicClient {
         let now = Int64(Date().timeIntervalSince1970 * 1_000)
 
         if credential.expiresAt > 0, credential.expiresAt <= now + refreshLeadTime {
-            try await refresher.renew(account: account, credential: credential)
-            credential = try await credentials.reload(for: account)
+            do {
+                try await refresher.renew(account: account, credential: credential)
+                credential = try await credentials.reload(for: account)
+            } catch {
+                try Task.checkCancellation()
+                AppLogger.write("[warn] Session renewal failed; attempting the cached access token")
+            }
         }
 
         do {
-            return try await fetchSnapshot(token: credential.accessToken)
+            return try await fetchSnapshot(credential: credential)
         } catch AnthropicClientError.http(let status) where status == 401 {
             // Claude Code may have renewed the profile outside ClaudeHub.
             // Re-read only after an actual authentication failure, never on
             // the normal five-minute usage refresh.
             let latest = try await credentials.reload(for: account)
-            return try await fetchSnapshot(token: latest.accessToken)
+            return try await fetchSnapshot(credential: latest)
         }
     }
 
@@ -45,7 +51,8 @@ struct AnthropicClient {
         await credentials.remove(for: account)
     }
 
-    private func fetchSnapshot(token: String) async throws -> AccountSnapshot {
+    private func fetchSnapshot(credential: OAuthCredential) async throws -> AccountSnapshot {
+        let token = credential.accessToken
         async let usageData = request(path: "/api/oauth/usage", token: token)
         async let profileData = request(path: "/api/oauth/profile", token: token)
         let (usageBytes, profileBytes) = try await (usageData, profileData)
@@ -56,7 +63,8 @@ struct AnthropicClient {
             email: profile.account.email,
             organizationID: profile.organization.uuid,
             usage: usage,
-            fetchedAt: Date()
+            fetchedAt: Date(),
+            refreshTokenExpiresAt: credential.refreshTokenExpiresAt
         )
     }
 

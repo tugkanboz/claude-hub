@@ -71,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             addDisabled(L10n.format(.error, message), to: submenu)
         case .loaded(let snapshot):
             if let email = snapshot.email { addDisabled(email, to: submenu) }
+            if let expiry = snapshot.refreshTokenExpiresAt,
+               expiry > 0, Double(expiry) / 1_000 - Date().timeIntervalSince1970 < 5 * 86_400 {
+                addDisabled(L10n.text(.refreshTokenExpiring), to: submenu)
+            }
             addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: submenu)
             addWindow(L10n.text(.sevenDay), snapshot.usage.sevenDay, to: submenu)
             addWindow(L10n.text(.sevenDaySonnet), snapshot.usage.sevenDaySonnet, to: submenu)
