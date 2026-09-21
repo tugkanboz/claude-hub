@@ -96,7 +96,11 @@ actor SessionCoordinator {
             try Task.checkCancellation()
             try await renewAction(account, credential)
             try Task.checkCancellation()
-            return try await cache.reload(for: account)
+            let renewed = try await cache.reload(for: account)
+            guard renewed.accessToken != credential.accessToken || renewed.expiresAt > credential.expiresAt else {
+                throw LoginRefreshError.failed
+            }
+            return renewed
         }
         renewals[account.id] = task
         do {

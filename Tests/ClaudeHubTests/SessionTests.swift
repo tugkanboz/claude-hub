@@ -74,7 +74,7 @@ final class SessionTests: XCTestCase {
 
     func testRepeated401IsBounded() async throws {
         let storage = FakeCredentials()
-        let sessions = SessionCoordinator(cache: CredentialCache(loader: { _ in storage.loadSource() }), automaticRenewal: false) { _, _ in }
+        let sessions = SessionCoordinator(cache: CredentialCache(loader: { _ in storage.loadSource() }), automaticRenewal: false) { _, _ in storage.setToken("new") }
         let attempts = RequestRecorder()
         let client = AnthropicClient(sessions: sessions) { credential in
             await attempts.record(credential.accessToken)
@@ -194,6 +194,20 @@ final class SessionTests: XCTestCase {
         try await sessions.reconnect(account)
         let latest = try await sessions.credential(for: account)
         XCTAssertEqual(latest.accessToken, "manual-login")
+    }
+
+    func testUnchangedCredentialAfterRenewalEntersBackoff() async throws {
+        let storage = FakeCredentials()
+        let calls = RequestRecorder()
+        let sessions = SessionCoordinator(cache: CredentialCache(loader: { _ in storage.loadSource() }), automaticRenewal: false) { _, _ in
+            await calls.record("renew")
+        }
+        await sessions.configure([account])
+        for _ in 0..<2 {
+            do { _ = try await sessions.renew(account, force: true); XCTFail("Expected renewal failure") } catch LoginRefreshError.failed { }
+        }
+        let recorded = await calls.tokens
+        XCTAssertEqual(recorded.count, 1)
     }
 
     private static func snapshot() throws -> AccountSnapshot {
