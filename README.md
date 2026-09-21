@@ -40,6 +40,7 @@ to check the remaining limits.
 - **Extra usage:** View extra usage details when they are enabled for an account.
 - **Automatic refresh:** Usage is refreshed every five minutes.
 - **Automatic token renewal:** Normal OAuth sessions are renewed through the installed Claude Code CLI.
+- **Expiry warnings:** Profiles show a warning when a known refresh-token expiry is less than five days away.
 - **Native macOS interface:** ClaudeHub is written in Swift and AppKit for Apple Silicon.
 - **No tracking:** There is no telemetry, advertising or third-party analytics SDK.
 
@@ -94,7 +95,7 @@ After every account is signed in:
 4. Enter the label that should appear in the menu.
 5. Repeat for the remaining profiles.
 
-ClaudeHub stores only the account label and profile directory path in:
+ClaudeHub stores the account UUID, label and profile directory path, but no tokens, in:
 
 ```text
 ~/Library/Application Support/ClaudeHub/accounts.json
@@ -103,24 +104,46 @@ ClaudeHub stores only the account label and profile directory path in:
 ## Keychain access
 
 Claude Code stores the credentials for every isolated profile in macOS
-Keychain. ClaudeHub reads each credential when the app starts and keeps it only
-in memory while the app is running.
+Keychain. ClaudeHub imports a profile's credential and keeps its own copy under
+the Keychain service `com.tugkanboz.claudehub.credentials`, identified by the
+account's stable UUID. It uses this copy after a restart and an in-memory cache
+while running. Existing profiles are imported on first use after upgrading.
 
-macOS may ask for permission once for every profile. Enter your Mac password
-and choose **Always Allow** so the published Developer ID-signed app can read
-that profile again after a restart. Choosing **Allow** grants access only for
-the current run and can cause the password prompt to return the next time you
-open ClaudeHub.
+macOS may ask for permission when importing a Claude Code credential. Choose
+**Always Allow** only if you trust the installed build. Claude Code can replace
+its Keychain item during renewal, so a later import can require permission
+again. The private copy reduces repeated startup reads; it does not guarantee
+that macOS will never show another permission prompt. Local ad-hoc builds and
+the published Developer ID-signed app can also have different access rights.
 
 The regular five-minute usage refresh uses the credential already held in
 memory. It does not read Keychain again on every refresh.
 
+Removing an account requires confirmation and deletes only ClaudeHub's account
+entry and its own credential copy. It does not delete the profile directory or
+the Claude Code Keychain item. A failed credential cleanup is reported.
+
 ## Automatic token renewal
 
-Five minutes before a normal access token expires, ClaudeHub passes the
-existing refresh token and scopes to the installed `claude` CLI. Claude Code
-renews the session and writes its updated credential back to its own Keychain
-item. ClaudeHub then reloads that profile.
+Each profile has its own renewal schedule, approximately ten minutes before
+access-token expiry. This schedule is independent of usage polling and keeps
+running for idle profiles while ClaudeHub is open. After sleep, overdue work
+is picked up when the app resumes. Nothing can renew while the Mac is shut down
+or ClaudeHub is closed.
+
+Before a scheduled renewal, ClaudeHub checks whether Claude Code has already
+updated the credential. If renewal is still needed, it passes the refresh token
+and scopes to the installed `claude` CLI. Claude Code writes the renewed session
+to its own Keychain item. ClaudeHub then imports the result into its private
+copy. ClaudeHub does not directly modify Claude Code's Keychain item.
+
+Automatic renewal is restricted to isolated profiles. The normal `~/.claude`
+directory is protected, including paths that resolve to it through a symlink.
+
+Only one renewal per account runs at a time. Failed renewals use a bounded
+retry delay, and the CLI process has a timeout. A renewal failure does not by
+itself hide otherwise accessible usage. An HTTP 401 triggers a credential
+reload, then one renewal attempt if necessary; it does not loop indefinitely.
 
 This process does not open a browser, invoke a model or consume Claude plan
 usage.
@@ -138,9 +161,10 @@ originally added to ClaudeHub. For example:
 CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/account2" claude auth login
 ```
 
-Complete the browser login, quit ClaudeHub and open it again so the in-memory
-credential is replaced. Then choose **Refresh Now**. You do not need to remove
-the profile from ClaudeHub or add it again.
+Complete the browser login, then choose **Accounts > Reconnect Profile >
+your profile** in ClaudeHub. This imports the new credential without restarting
+or removing the account. Reopening the app alone may reuse its private cached
+credential, so use **Reconnect Profile** after a manual login.
 
 ## After restarting the Mac
 
@@ -151,8 +175,10 @@ macOS Keychain.
 
 Open ClaudeHub again after signing in to macOS. If you want it to start
 automatically, add ClaudeHub under **System Settings > General > Login Items**.
-Profiles granted **Always Allow** Keychain access should load without another
-permission prompt.
+Profiles normally load from ClaudeHub's own Keychain copy. Locked Keychains,
+changes to the app's signature and importing a replaced Claude Code item can
+still require permission. A restart does not extend an expired or revoked
+refresh token; use the reconnect instructions if necessary.
 
 ## Languages
 
@@ -161,6 +187,8 @@ English, French and Spanish. Unsupported system languages fall back to English.
 The product name remains **ClaudeHub** in every language.
 
 ## Build from source
+
+Use Swift 5.10 or newer on macOS with the Xcode command-line tools installed.
 
 ```bash
 swift test
@@ -172,6 +200,44 @@ The application bundle is written to `dist/ClaudeHub.app`. Local builds receive
 an ad-hoc signature. GitHub release builds use the configured Developer ID
 certificate, are notarized by Apple and are verified with Gatekeeper before
 publishing.
+
+The build generates `AppIcon.icns` and its iconset from the checked-in 1024px
+PNG using macOS `sips` and `iconutil`. To redraw the PNG from the SVG first,
+install `rsvg-convert` and run `bash scripts/build-icons.sh --render-svg`.
+
+CI runs the tests twice, builds the app, checks the bundled icon and verifies
+the DMG. CI artifacts are ad-hoc-signed test builds, not notarized releases.
+
+### Session-change smoke test
+
+Before releasing changes to credential handling, test the signed app on a Mac:
+
+1. Add two isolated profiles and verify their usage independently.
+2. Quit and reopen the app. Confirm it can reuse its private Keychain copies.
+3. Sign in again to one profile from Terminal, then reconnect that profile in
+   the menu. Confirm the other profile is unaffected.
+4. Let a profile reach renewal time while it is not being used in Terminal.
+   Verify renewal still happens without a manual usage refresh.
+5. Sleep and wake the Mac across a renewal deadline, then check the profile.
+6. Deny a Keychain read and disconnect the network. Confirm errors are bounded
+   and the app remains responsive. Restore access and reconnect.
+7. Repeatedly press Refresh Now while removing a profile. Confirm cancelled
+   work does not restore a removed account or overwrite newer results.
+
+Automated tests use fake credentials and do not access personal tokens. They
+cannot verify macOS permission dialogs or Anthropic's live renewal behavior.
+
+## Account-file recovery and logs
+
+Older `config_dir` account entries are normalized on successful load, preserving
+their generated IDs for later launches. If `accounts.json` is invalid, the app
+keeps the original, attempts an `accounts.json.bak` backup and disables account
+changes. Existing backups are preserved with uniquely named additional backups.
+Inspect or restore the file before reopening the app; an empty account list is
+never saved over a failed load.
+
+Logs are stored at `~/Library/Logs/ClaudeHub/menubar.log`. At about 1 MB the log
+rotates to `menubar.log.1`; only the latest rotated log is retained.
 
 ## Privacy
 
