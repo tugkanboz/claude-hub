@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var refreshTimer: Timer?
     private var accountStoreAvailable = true
+    private var refreshTask: Task<Void, Never>?
+    private var refreshGeneration = RefreshGeneration()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do { accounts = try accountStore.load() } catch {
@@ -117,18 +119,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func timerFired() { refreshAll() }
 
     private func refreshAll() {
+        refreshTask?.cancel()
+        let generation = refreshGeneration.advance()
+        let requestedAccounts = accounts
         for account in accounts { states[account.id] = .loading }
         rebuildMenu()
-        Task {
-            for account in accounts {
-                do {
-                    states[account.id] = .loaded(try await client.snapshot(for: account))
-                } catch {
-                    let message = error.localizedDescription
-                    states[account.id] = .failed(message)
-                    AppLogger.write("[warn] \(account.label): \(message)")
+        refreshTask = Task {
+            await withTaskGroup(of: (UUID, AccountState).self) { group in
+                for account in requestedAccounts {
+                    group.addTask { [client] in
+                        do {
+                            try Task.checkCancellation()
+                            return (account.id, .loaded(try await client.snapshot(for: account)))
+                        } catch {
+                            return (account.id, .failed(error.localizedDescription))
+                        }
+                    }
                 }
-                rebuildMenu()
+                for await (id, state) in group {
+                    guard !Task.isCancelled,
+                          refreshGeneration.accepts(generation),
+                          accounts.contains(where: { $0.id == id }) else { continue }
+                    states[id] = state
+                    rebuildMenu()
+                }
             }
         }
     }
@@ -145,12 +159,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent(".claude-accounts", isDirectory: true)
         guard picker.runModal() == .OK, let url = picker.url else { return }
 
-        let path = url.path
-        guard FileManager.default.fileExists(atPath: url.appendingPathComponent(".claude.json").path) else {
+        let normalizedURL = url.standardizedFileURL.resolvingSymlinksInPath()
+        let path = normalizedURL.path
+        guard FileManager.default.fileExists(atPath: normalizedURL.appendingPathComponent(".claude.json").path) else {
             showError(L10n.text(.missingClaudeJSON))
             return
         }
-        if accounts.contains(where: { $0.configDirectory == path }) {
+        if accounts.contains(where: {
+            URL(fileURLWithPath: $0.configDirectory).standardizedFileURL.resolvingSymlinksInPath().path == path
+        }) {
             showError(L10n.text(.profileAlreadyAdded))
             return
         }
@@ -197,7 +214,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accounts = updated
         states[id] = nil
         Task { await client.forget(account) }
-        rebuildMenu()
+        refreshAll()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        refreshTask?.cancel()
+        refreshTimer?.invalidate()
     }
 
     @objc private func quitPressed() { NSApplication.shared.terminate(nil) }
