@@ -18,7 +18,7 @@ actor SessionCoordinator {
     private let renewAction: Renew
     private let automaticRenewal: Bool
     private var accounts: [UUID: Account] = [:]
-    private var schedules: [UUID: Task<Void, Never>] = [:]
+    private var schedules: [UUID: (generation: UUID, task: Task<Void, Never>)] = [:]
     private var renewals: [UUID: Task<OAuthCredential, Error>] = [:]
     private var nextAllowed: [UUID: Date] = [:]
     private var failures: [UUID: Int] = [:]
@@ -31,9 +31,10 @@ actor SessionCoordinator {
     }
 
     func configure(_ accounts: [Account]) {
+        guard !Task.isCancelled else { return }
         let remaining = Set(accounts.map(\.id))
         for id in self.accounts.keys where !remaining.contains(id) {
-            schedules.removeValue(forKey: id)?.cancel()
+            schedules.removeValue(forKey: id)?.task.cancel()
             renewals[id]?.cancel()
             nextAllowed[id] = nil
             failures[id] = nil
@@ -73,7 +74,7 @@ actor SessionCoordinator {
 
     func forget(_ account: Account) async throws {
         accounts[account.id] = nil
-        schedules.removeValue(forKey: account.id)?.cancel()
+        schedules.removeValue(forKey: account.id)?.task.cancel()
         if let task = renewals[account.id] {
             task.cancel()
             _ = await task.result
@@ -83,12 +84,15 @@ actor SessionCoordinator {
         try await cache.remove(for: account)
     }
 
-    func renew(_ account: Account) async throws -> OAuthCredential {
+    func renew(_ account: Account, force: Bool = false) async throws -> OAuthCredential {
         guard accounts[account.id] != nil else { throw CancellationError() }
         if let pending = renewals[account.id] { return try await pending.value }
         if let next = nextAllowed[account.id], next > Date() { throw LoginRefreshError.failed }
         let task = Task { [cache, renewAction] in
-            let credential = try await cache.read(for: account)
+            let credential = try await (force ? cache.read(for: account) : cache.reload(for: account))
+            if !force, Double(credential.expiresAt) / 1_000 > Date().timeIntervalSince1970 + 600 {
+                return credential
+            }
             try Task.checkCancellation()
             try await renewAction(account, credential)
             try Task.checkCancellation()
@@ -118,21 +122,29 @@ actor SessionCoordinator {
     private func schedule(_ account: Account, credential: OAuthCredential) {
         guard automaticRenewal, accounts[account.id] != nil, credential.expiresAt > 0,
               credential.refreshToken?.isEmpty == false, credential.scopes?.isEmpty == false else { return }
-        schedules[account.id]?.cancel()
+        schedules[account.id]?.task.cancel()
+        if let expiry = credential.refreshTokenExpiresAt, expiry > 0,
+           Double(expiry) / 1_000 <= Date().timeIntervalSince1970 {
+            schedules[account.id] = nil
+            return
+        }
         let due = RenewalPolicy.scheduledDate(for: credential, now: Date(), notBefore: nextAllowed[account.id])
-        schedules[account.id] = Task { [weak self] in
+        let generation = UUID()
+        let task = Task { [weak self] in
             do {
                 while due.timeIntervalSinceNow > 0 {
                     let delay = min(60, max(0.01, due.timeIntervalSinceNow))
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
                 try Task.checkCancellation()
-                await self?.scheduledRenewal(account)
+                await self?.scheduledRenewal(account, generation: generation)
             } catch { }
         }
+        schedules[account.id] = (generation, task)
     }
 
-    private func scheduledRenewal(_ account: Account) async {
+    private func scheduledRenewal(_ account: Account, generation: UUID) async {
+        guard schedules[account.id]?.generation == generation else { return }
         schedules[account.id] = nil
         guard accounts[account.id] != nil else { return }
         do { _ = try await renew(account) } catch {

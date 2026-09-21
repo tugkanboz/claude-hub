@@ -68,7 +68,7 @@ final class SessionTests: XCTestCase {
         }
         let client = AnthropicClient(sessions: sessions) { _ in try Self.snapshot() }
         await client.configure(accounts: [account])
-        do { _ = try await sessions.renew(account); XCTFail("Expected failure") } catch { }
+        do { _ = try await sessions.renew(account, force: true); XCTFail("Expected failure") } catch { }
         _ = try await client.snapshot(for: account)
     }
 
@@ -105,7 +105,7 @@ final class SessionTests: XCTestCase {
         }
         await sessions.configure([account])
         try await withThrowingTaskGroup(of: String.self) { group in
-            for _ in 0..<10 { group.addTask { try await sessions.renew(self.account).accessToken } }
+            for _ in 0..<10 { group.addTask { try await sessions.renew(self.account, force: true).accessToken } }
             for try await token in group { XCTAssertEqual(token, "new") }
         }
         let recorded = await calls.tokens
@@ -129,6 +129,71 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(RenewalPolicy.scheduledDate(for: credential, now: Date(timeIntervalSince1970: 3_000)).timeIntervalSince1970, 3_000)
         XCTAssertEqual(RenewalPolicy.retryDelay(failures: 1), 300)
         XCTAssertEqual(RenewalPolicy.retryDelay(failures: 10), 1_800)
+    }
+
+    func testFreshExternalCredentialSkipsScheduledCLIRenewal() async throws {
+        let storage = FakeCredentials()
+        let cache = CredentialCache(loader: { _ in storage.loadSource() })
+        _ = try await cache.read(for: account)
+        storage.setToken("external")
+        let sessions = SessionCoordinator(cache: cache, automaticRenewal: false) { _, _ in XCTFail("Already renewed externally") }
+        await sessions.configure([account])
+        let credential = try await sessions.renew(account)
+        XCTAssertEqual(credential.accessToken, "external")
+    }
+
+    func testDeniedReloadDoesNotLoopOrRenew() async throws {
+        let cache = CredentialCache(loader: { _ in throw CredentialStoreError.keychain(-25293) })
+        await cache.remember(OAuthCredential(accessToken: "test", refreshToken: "test", expiresAt: 1, scopes: []), for: account)
+        let sessions = SessionCoordinator(cache: cache, automaticRenewal: false) { _, _ in XCTFail("Permission denied") }
+        let attempts = RequestRecorder()
+        let client = AnthropicClient(sessions: sessions) { credential in
+            await attempts.record(credential.accessToken)
+            throw AnthropicClientError.http(401)
+        }
+        await client.configure(accounts: [account])
+        do { _ = try await client.snapshot(for: account); XCTFail("Expected failure") } catch AnthropicClientError.http(401) { }
+        let recorded = await attempts.tokens
+        XCTAssertEqual(recorded.count, 1)
+    }
+
+    func testRemovalDuringRenewalDoesNotRestoreCache() async throws {
+        let entered = expectation(description: "Renewal started")
+        let storage = FakeCredentials()
+        let cache = CredentialCache(loader: { _ in storage.loadSource() }, persistence: storage.persistence)
+        let sessions = SessionCoordinator(cache: cache, automaticRenewal: false) { _, _ in
+            entered.fulfill()
+            try await Task.sleep(nanoseconds: 30_000_000_000)
+        }
+        await sessions.configure([account])
+        let task = Task { try await sessions.renew(account, force: true) }
+        await fulfillment(of: [entered], timeout: 2)
+        try await sessions.forget(account)
+        do { _ = try await task.value; XCTFail("Expected cancellation") } catch is CancellationError { }
+        XCTAssertNil(try storage.persistence.read(account))
+        do { _ = try await sessions.credential(for: account); XCTFail("Removed account") } catch is CancellationError { }
+    }
+
+    func testPersistenceWriteFailureKeepsUsableMemoryCredential() async throws {
+        let storage = FakeCredentials()
+        let persistence = CredentialPersistence(read: { _ in nil }, write: { _, _ in throw CredentialStoreError.keychain(-25293) }, remove: { _ in })
+        let cache = CredentialCache(loader: { _ in storage.loadSource() }, persistence: persistence)
+        let first = try await cache.read(for: account)
+        let second = try await cache.read(for: account)
+        XCTAssertEqual(first.accessToken, second.accessToken)
+        XCTAssertEqual(storage.readCount, 1)
+    }
+
+    func testManualReconnectReplacesCachedTokenWithoutRestart() async throws {
+        let storage = FakeCredentials()
+        let cache = CredentialCache(loader: { _ in storage.loadSource() })
+        let sessions = SessionCoordinator(cache: cache, automaticRenewal: false)
+        await sessions.configure([account])
+        _ = try await sessions.credential(for: account)
+        storage.setToken("manual-login")
+        try await sessions.reconnect(account)
+        let latest = try await sessions.credential(for: account)
+        XCTAssertEqual(latest.accessToken, "manual-login")
     }
 
     private static func snapshot() throws -> AccountSnapshot {

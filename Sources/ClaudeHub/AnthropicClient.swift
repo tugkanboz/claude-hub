@@ -42,7 +42,7 @@ struct AnthropicClient {
             do { return try await fetch(latest) } catch AnthropicClientError.http(401) {
                 try Task.checkCancellation()
                 let renewed: OAuthCredential
-                do { renewed = try await sessions.renew(account) } catch {
+                do { renewed = try await sessions.renew(account, force: true) } catch {
                     try Task.checkCancellation()
                     AppLogger.write("[warn] Could not renew credentials after HTTP 401")
                     throw AnthropicClientError.http(401)
