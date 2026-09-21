@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum LoginRefreshError: LocalizedError {
     case missingRefreshToken
@@ -32,7 +33,9 @@ struct ClaudeLoginRefresher {
             throw LoginRefreshError.cliNotFound
         }
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        let execution = LoginProcessExecution()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()
                 process.executableURL = executable
@@ -47,17 +50,15 @@ struct ClaudeLoginRefresher {
                 process.standardError = FileHandle.nullDevice
 
                 do {
-                    try process.run()
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        continuation.resume()
-                    } else {
-                        continuation.resume(throwing: LoginRefreshError.failed)
-                    }
+                    try execution.run(process, timeout: 60)
+                    continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
                 }
             }
+            }
+        } onCancel: {
+            execution.cancel()
         }
     }
 
@@ -70,5 +71,54 @@ struct ClaudeLoginRefresher {
             URL(fileURLWithPath: "/usr/local/bin/claude"),
         ]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+}
+
+final class LoginProcessExecution: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    func cancel() {
+        lock.lock()
+        defer { lock.unlock() }
+        cancelled = true
+        if let process, process.isRunning { process.terminate() }
+    }
+
+    func run(_ process: Process, timeout: TimeInterval) throws {
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        lock.lock()
+        if cancelled { lock.unlock(); throw CancellationError() }
+        self.process = process
+        do { try process.run() } catch {
+            self.process = nil
+            lock.unlock()
+            throw error
+        }
+        lock.unlock()
+        let deadline = Date().addingTimeInterval(timeout)
+        var timedOut = false
+        while finished.wait(timeout: .now() + 0.1) == .timedOut {
+            lock.lock()
+            let stopped = cancelled
+            lock.unlock()
+            if stopped || Date() >= deadline {
+                timedOut = !stopped
+                if process.isRunning { process.terminate() }
+                if finished.wait(timeout: .now() + 2) == .timedOut, process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                    process.waitUntilExit()
+                }
+                break
+            }
+        }
+        lock.lock()
+        self.process = nil
+        let wasCancelled = cancelled
+        lock.unlock()
+        if wasCancelled { throw CancellationError() }
+        guard !timedOut, process.terminationStatus == 0 else { throw LoginRefreshError.failed }
     }
 }
