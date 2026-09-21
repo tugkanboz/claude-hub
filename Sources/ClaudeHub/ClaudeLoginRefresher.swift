@@ -6,6 +6,7 @@ enum LoginRefreshError: LocalizedError {
     case missingScopes
     case cliNotFound
     case failed
+    case defaultProfileProtected
 
     var errorDescription: String? {
         switch self {
@@ -17,12 +18,17 @@ enum LoginRefreshError: LocalizedError {
             return L10n.text(.cliNotFound)
         case .failed:
             return L10n.text(.loginRefreshFailed)
+        case .defaultProfileProtected:
+            return L10n.text(.defaultProfileProtected)
         }
     }
 }
 
 struct ClaudeLoginRefresher {
     func renew(account: Account, credential: OAuthCredential) async throws {
+        guard !Self.isDefaultProfile(account.configDirectory) else {
+            throw LoginRefreshError.defaultProfileProtected
+        }
         guard let refreshToken = credential.refreshToken, !refreshToken.isEmpty else {
             throw LoginRefreshError.missingRefreshToken
         }
@@ -36,30 +42,36 @@ struct ClaudeLoginRefresher {
         let execution = LoginProcessExecution()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                process.executableURL = executable
-                process.arguments = ["auth", "login", "--claudeai"]
-                var environment = ProcessInfo.processInfo.environment
-                environment["CLAUDE_CONFIG_DIR"] = account.configDirectory
-                environment["CLAUDE_CODE_OAUTH_REFRESH_TOKEN"] = refreshToken
-                environment["CLAUDE_CODE_OAUTH_SCOPES"] = scopes.joined(separator: " ")
-                process.environment = environment
-                process.standardInput = FileHandle.nullDevice
-                process.standardOutput = FileHandle.nullDevice
-                process.standardError = FileHandle.nullDevice
+                DispatchQueue.global(qos: .utility).async {
+                    let process = Process()
+                    process.executableURL = executable
+                    process.arguments = ["auth", "login", "--claudeai"]
+                    var environment = ProcessInfo.processInfo.environment
+                    environment["CLAUDE_CONFIG_DIR"] = account.configDirectory
+                    environment["CLAUDE_CODE_OAUTH_REFRESH_TOKEN"] = refreshToken
+                    environment["CLAUDE_CODE_OAUTH_SCOPES"] = scopes.joined(separator: " ")
+                    process.environment = environment
+                    process.standardInput = FileHandle.nullDevice
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
 
-                do {
-                    try execution.run(process, timeout: 60)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
+                    do {
+                        try execution.run(process, timeout: 60)
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
-            }
             }
         } onCancel: {
             execution.cancel()
         }
+    }
+
+    static func isDefaultProfile(_ path: String) -> Bool {
+        let normal = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+            == normal.standardizedFileURL.resolvingSymlinksInPath()
     }
 
     private static func findClaudeExecutable() -> URL? {

@@ -37,6 +37,7 @@ enum L10nKey {
     case sessionExpired, refreshTokenExpiring
     case confirmRemoveAccount, removeAccountHelp
     case reconnectProfile, credentialCleanupFailed
+    case defaultProfileProtected
 }
 
 enum L10n {
@@ -64,6 +65,7 @@ enum L10n {
 
     private static let translations: [AppLanguage: [L10nKey: String]] = [
         .tr: [
+            .defaultProfileProtected: "Varsayılan ~/.claude profili otomatik değiştirilmez. Ayrı bir CLAUDE_CONFIG_DIR profili kullan.",
             .reconnectProfile: "Profili yeniden bağla",
             .credentialCleanupFailed: "Hesap kaldırıldı ancak ClaudeHub'ın Keychain kopyası silinemedi. Keychain Erişimi'nde com.tugkanboz.claudehub.credentials kaydını kontrol et. Claude Code kaydı değiştirilmedi.",
             .confirmRemoveAccount: "%@ kaldırılsın mı?",
@@ -112,6 +114,7 @@ enum L10n {
             .anthropicHTTPFailed: "Anthropic isteği HTTP %d ile başarısız oldu.",
         ],
         .en: [
+            .defaultProfileProtected: "The default ~/.claude profile is not modified automatically. Use a separate CLAUDE_CONFIG_DIR profile.",
             .reconnectProfile: "Reconnect Profile",
             .credentialCleanupFailed: "The account was removed, but its ClaudeHub Keychain copy could not be deleted. Check com.tugkanboz.claudehub.credentials in Keychain Access. The Claude Code item was not changed.",
             .confirmRemoveAccount: "Remove %@?",
@@ -160,6 +163,7 @@ enum L10n {
             .anthropicHTTPFailed: "The Anthropic request failed with HTTP %d.",
         ],
         .fr: [
+            .defaultProfileProtected: "Le profil ~/.claude par défaut n’est pas modifié automatiquement. Utilisez un profil CLAUDE_CONFIG_DIR distinct.",
             .reconnectProfile: "Reconnecter le profil",
             .credentialCleanupFailed: "Le compte a été retiré, mais sa copie ClaudeHub n’a pas pu être supprimée du trousseau. Vérifiez com.tugkanboz.claudehub.credentials dans Trousseaux d’accès. L’élément Claude Code n’a pas été modifié.",
             .confirmRemoveAccount: "Supprimer %@ ?",
@@ -208,6 +212,7 @@ enum L10n {
             .anthropicHTTPFailed: "La requête Anthropic a échoué avec le code HTTP %d.",
         ],
         .es: [
+            .defaultProfileProtected: "El perfil ~/.claude predeterminado no se modifica automáticamente. Usa un perfil CLAUDE_CONFIG_DIR separado.",
             .reconnectProfile: "Reconectar perfil",
             .credentialCleanupFailed: "La cuenta se eliminó, pero no se pudo borrar su copia de ClaudeHub del llavero. Revisa com.tugkanboz.claudehub.credentials en Acceso a Llaveros. No se modificó el elemento de Claude Code.",
             .confirmRemoveAccount: "¿Eliminar %@?",

@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func accountManagementMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         let add = NSMenuItem(title: L10n.text(.addProfile), action: #selector(addAccountPressed), keyEquivalent: "")
         add.target = self
         add.isEnabled = accountStoreAvailable
@@ -209,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             states[account.id] = .loading
             rebuildMenu()
             Task {
+                guard accounts.contains(where: { $0.id == account.id }) else { return }
                 await client.remember(credential, for: account)
                 refreshAll()
             }

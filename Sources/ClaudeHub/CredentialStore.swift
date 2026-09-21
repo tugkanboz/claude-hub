@@ -58,6 +58,11 @@ struct CredentialPersistence: Sendable {
 struct HubCredentialStore {
     static let service = "com.tugkanboz.claudehub.credentials"
 
+    private struct Entry: Codable {
+        let configDirectory: String
+        let credential: OAuthCredential
+    }
+
     private func query(for account: Account) -> [CFString: Any] {
         [kSecClass: kSecClassGenericPassword, kSecAttrService: Self.service,
          kSecAttrAccount: account.id.uuidString]
@@ -72,11 +77,13 @@ struct HubCredentialStore {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw CredentialStoreError.keychain(status) }
         guard let data = item as? Data else { throw CredentialStoreError.malformedCredential }
-        return try JSONDecoder().decode(OAuthCredential.self, from: data)
+        let entry = try JSONDecoder().decode(Entry.self, from: data)
+        guard entry.configDirectory == account.configDirectory else { return nil }
+        return entry.credential
     }
 
     func write(_ credential: OAuthCredential, for account: Account) throws {
-        let data = try JSONEncoder().encode(credential)
+        let data = try JSONEncoder().encode(Entry(configDirectory: account.configDirectory, credential: credential))
         let query = query(for: account)
         var status = SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary)
         if status == errSecItemNotFound {
