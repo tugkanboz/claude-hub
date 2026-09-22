@@ -27,7 +27,7 @@ enum UsageJournalSummary {
             let age = now.timeIntervalSince(sample.fetchedAt)
             return age >= 0 && age <= 360 ? sample : nil
         }
-        let windows = fresh.map { windows(from: $0.usage) } ?? []
+        let windows = fresh.map { Self.windows(from: $0.usage) } ?? []
         var summary: [String] = []
         if let fresh {
             summary.append(L10n.format(.journalSampled, timestamp(fresh.fetchedAt), language: language))

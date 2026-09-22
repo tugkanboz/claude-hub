@@ -2,7 +2,7 @@ import AppKit
 
 enum HourBoundary {
     static func next(after date: Date, calendar: Calendar = .autoupdatingCurrent) -> Date? {
-        calendar.nextDate(after: date, matching: DateComponents(minute: 0, second: 0), matchingPolicy: .nextTime)
+        calendar.dateInterval(of: .hour, for: date)?.end
     }
 
     static func canRecord(scheduled: Date, now: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {

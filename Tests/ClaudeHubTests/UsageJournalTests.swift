@@ -27,7 +27,7 @@ final class UsageJournalTests: XCTestCase {
         let spring = try XCTUnwrap(HourBoundary.next(after: date("2026-03-08T06:30:00Z"), calendar: calendar))
         XCTAssertEqual(spring, date("2026-03-08T07:00:00Z"))
         let fall = try XCTUnwrap(HourBoundary.next(after: date("2026-11-01T05:30:00Z"), calendar: calendar))
-        XCTAssertGreaterThan(fall, date("2026-11-01T05:30:00Z"))
+        XCTAssertEqual(fall, date("2026-11-01T06:00:00Z"))
         XCTAssertEqual(calendar.component(.minute, from: fall), 0)
     }
 
