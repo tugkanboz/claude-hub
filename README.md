@@ -249,22 +249,31 @@ Open an account's submenu and choose **Open Usage Journal** to see its files:
 ~/.claude-usage/ClaudeHub/<account-UUID>/2026-09-22.json
 ```
 
-The `.log` file is readable text. The `.json` file contains the measurements and
-the same explanations for later analysis. Files are grouped by UTC date; the
-readable timestamps include the local UTC offset. Journal explanations follow
-the app's Turkish, English, French or Spanish language at recording time.
+The `.log` file is a plain-text table without commentary. Percentages and costs
+are right-aligned; every column has one width throughout the daily file, so
+`1.0%`, `25.0%` and `100.0%` do not shift the separators. Open it in a monospaced
+font with line wrapping disabled. Missing values appear as `-`, not zero.
+Each usage window has its own row; extra usage adds cost columns when available.
+Headers and status labels follow the app's Turkish, English, French or Spanish
+language. Existing entries in the current daily log are rendered as a table on
+the next journal write; older files are left unchanged.
 
-For example, a record might say:
+The `.json` file retains measurements and explanations for later analysis.
+Files are grouped by UTC date; table timestamps include the local UTC offset.
+
+Example percentage alignment (the full log also includes measurement and reset timestamps):
 
 ```text
-2026-09-22T11:00:00+03:00 · ClaudeHub · 12345678
-  Measured at: 2026-09-22T10:57:00+03:00
-  5 hours: 85.0% used · Resets at: 2026-09-22T13:00:00+03:00
-  Usage increased: 70.0% → 85.0% (+15.0 percentage points).
-  Approaching the limit; reported remaining share is 15.0%.
+|-------|---------|--------|
+| Time  | Period  | Usage  |
+|-------|---------|--------|
+| 09:00 | 5 hours |   1.0% |
+| 10:00 | 5 hours |  25.0% |
+| 11:00 | 5 hours | 100.0% |
+|-------|---------|--------|
 ```
 
-Records distinguish first observations, unchanged usage, increases, reported
+JSON explanations distinguish first observations, unchanged usage, increases, reported
 decreases, approaching limits, changed reset times and recovery after missing
 data. Deltas are only calculated between consecutive available hourly records
 with matching known reset times. A gap or a changed period does not produce a

@@ -38,6 +38,7 @@ enum L10nKey {
     case confirmRemoveAccount, removeAccountHelp
     case reconnectProfile, credentialCleanupFailed
     case defaultProfileProtected
+    case journalExtra, journalTime, journalMeasurement, journalStatus, journalPeriod, journalPercent, journalReset, journalAvailable, journalMissing, journalSpent, journalBudget
     case journalOpen, journalWriteFailed, journalSampled, journalGap, journalFirst, journalRecovered
     case journalWindow, journalUnknownReset, journalNewPeriod, journalResetChanged, journalUnchanged
     case journalIncrease, journalDecrease, journalLimitReached, journalNearLimit, journalNoWindows, journalUnavailable
@@ -68,6 +69,17 @@ enum L10n {
 
     private static let translations: [AppLanguage: [L10nKey: String]] = [
         .tr: [
+            .journalExtra: "Ek kullanım",
+            .journalTime: "Saat",
+            .journalMeasurement: "Ölçüm",
+            .journalStatus: "Durum",
+            .journalPeriod: "Dönem",
+            .journalPercent: "Kullanım",
+            .journalReset: "Sıfırlanma",
+            .journalAvailable: "Güncel",
+            .journalMissing: "Veri yok",
+            .journalSpent: "Harcama ($)",
+            .journalBudget: "Limit ($)",
             .journalOpen: "Kullanım günlüğünü aç",
             .journalWriteFailed: "Günlük klasörüne erişilemedi veya kayıt yazılamadı. Disk alanını ve izinleri kontrol et.",
             .journalSampled: "Ölçüm zamanı: %@",
@@ -134,6 +146,17 @@ enum L10n {
             .anthropicHTTPFailed: "Anthropic isteği HTTP %d ile başarısız oldu.",
         ],
         .en: [
+            .journalExtra: "Extra usage",
+            .journalTime: "Time",
+            .journalMeasurement: "Measured",
+            .journalStatus: "Status",
+            .journalPeriod: "Period",
+            .journalPercent: "Usage",
+            .journalReset: "Reset",
+            .journalAvailable: "Available",
+            .journalMissing: "No data",
+            .journalSpent: "Spent ($)",
+            .journalBudget: "Limit ($)",
             .journalOpen: "Open Usage Journal",
             .journalWriteFailed: "Could not access the journal folder or write a record. Check disk space and permissions.",
             .journalSampled: "Measured at: %@",
@@ -200,6 +223,17 @@ enum L10n {
             .anthropicHTTPFailed: "The Anthropic request failed with HTTP %d.",
         ],
         .fr: [
+            .journalExtra: "Usage supplémentaire",
+            .journalTime: "Heure",
+            .journalMeasurement: "Mesure",
+            .journalStatus: "État",
+            .journalPeriod: "Période",
+            .journalPercent: "Utilisation",
+            .journalReset: "Réinitialisation",
+            .journalAvailable: "Disponible",
+            .journalMissing: "Indisponible",
+            .journalSpent: "Dépense ($)",
+            .journalBudget: "Limite ($)",
             .journalOpen: "Ouvrir le journal d’utilisation",
             .journalWriteFailed: "Impossible d’accéder au journal ou d’écrire une entrée. Vérifiez l’espace disque et les autorisations.",
             .journalSampled: "Mesure effectuée à : %@",
@@ -266,6 +300,17 @@ enum L10n {
             .anthropicHTTPFailed: "La requête Anthropic a échoué avec le code HTTP %d.",
         ],
         .es: [
+            .journalExtra: "Uso adicional",
+            .journalTime: "Hora",
+            .journalMeasurement: "Medición",
+            .journalStatus: "Estado",
+            .journalPeriod: "Periodo",
+            .journalPercent: "Uso",
+            .journalReset: "Reinicio",
+            .journalAvailable: "Disponible",
+            .journalMissing: "Sin datos",
+            .journalSpent: "Gasto ($)",
+            .journalBudget: "Límite ($)",
             .journalOpen: "Abrir diario de uso",
             .journalWriteFailed: "No se pudo acceder al diario o escribir una entrada. Revisa el espacio en disco y los permisos.",
             .journalSampled: "Medición realizada: %@",

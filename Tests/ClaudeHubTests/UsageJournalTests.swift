@@ -111,7 +111,9 @@ final class UsageJournalTests: XCTestCase {
         XCTAssertEqual(entries.count, 2)
         XCTAssertTrue(entries[1].summary.contains { $0.contains("+15.0 percentage points") })
         let text = try String(contentsOf: directory.appendingPathComponent("2026-09-22.log"))
-        XCTAssertTrue(text.contains("Usage increased"))
+        XCTAssertFalse(text.contains("Usage increased"))
+        XCTAssertTrue(text.contains("35.0%"))
+        XCTAssertTrue(text.hasPrefix("|"))
         XCTAssertFalse(text.contains("private@example.com"))
     }
 
@@ -145,6 +147,40 @@ final class UsageJournalTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: keep.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
+    }
+
+    func testTableAlignsPercentagesInEveryLanguageWithoutCommentary() throws {
+        let now = date("2026-09-22T10:00:00Z")
+        let entries = try [1.0, 25.0, 100.0].map { make(now, sample: try snapshot($0, at: now)) } + [make(now, sample: nil)]
+        for language in AppLanguage.allCases {
+            let text = UsageJournalTable.render(entries, language: language)
+            let lines = text.split(separator: "\n")
+            let separators = lines.map { line in
+                Array(line).enumerated().compactMap { $0.element == "|" ? $0.offset : nil }
+            }
+            XCTAssertTrue(separators.allSatisfy { $0 == separators[0] })
+            XCTAssertTrue(text.contains("  1.0%"))
+            XCTAssertTrue(text.contains(" 25.0%"))
+            XCTAssertTrue(text.contains("100.0%"))
+            XCTAssertFalse(text.contains(entries[0].summary[0]))
+            XCTAssertTrue(text.contains(L10n.text(.journalMissing, language: language)))
+        }
+    }
+
+    func testTableExtraUsageAndInvalidResetStayAligned() throws {
+        let now = date("2026-09-22T10:00:00Z")
+        let entry = UsageJournalEntry(schemaVersion: 1, accountID: id, scheduledAt: now, recordedAt: now,
+            sampledAt: now, status: "available", language: "en",
+            windows: [JournalWindow(name: "five_hour", utilization: 1, resetsAt: "bad|reset\n")],
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 10000, usedCredits: 2500, utilization: 25), summary: [])
+        let text = UsageJournalTable.render([entry], language: .en)
+        XCTAssertTrue(text.contains("25.00"))
+        XCTAssertTrue(text.contains("100.00"))
+        XCTAssertTrue(text.contains("Extra usage"))
+        XCTAssertFalse(text.contains("bad|reset"))
+        let lengths = text.split(separator: "\n").map { $0.count }
+        XCTAssertEqual(Set(lengths).count, 1)
+        XCTAssertFalse(text.contains("%.2f"))
     }
 
     private func make(_ now: Date, sample: AccountSnapshot?, previous: UsageJournalEntry? = nil, success: UsageJournalEntry? = nil) -> UsageJournalEntry {

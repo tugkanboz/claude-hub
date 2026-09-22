@@ -63,10 +63,7 @@ actor UsageJournalStore {
         if let success = entries.last(where: { $0.scheduledAt <= scheduled && $0.status == "available" }) {
             previousSuccess[accountID] = success
         }
-        let readable = entries.map { entry in
-            "\(UsageJournalSummary.timestamp(entry.scheduledAt)) · ClaudeHub · \(entry.accountID.uuidString.prefix(8))\n"
-                + entry.summary.map { "  " + $0 }.joined(separator: "\n") + "\n"
-        }.joined(separator: "\n")
+        let readable = UsageJournalTable.render(entries, language: language)
         try write(Data(readable.utf8), to: directory.appendingPathComponent(day + ".log"))
     }
 
