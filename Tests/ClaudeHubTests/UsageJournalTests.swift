@@ -154,7 +154,7 @@ final class UsageJournalTests: XCTestCase {
         let entries = try [1.0, 25.0, 100.0].map { make(now, sample: try snapshot($0, at: now)) } + [make(now, sample: nil)]
         for language in AppLanguage.allCases {
             let text = UsageJournalTable.render(entries, language: language)
-            let lines = text.split(separator: "\n")
+            let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
             let separators = lines.map { line in
                 Array(line).enumerated().compactMap { $0.element == "|" ? $0.offset : nil }
             }
@@ -178,7 +178,7 @@ final class UsageJournalTests: XCTestCase {
         XCTAssertTrue(text.contains("100.00"))
         XCTAssertTrue(text.contains("Extra usage"))
         XCTAssertFalse(text.contains("bad|reset"))
-        let lengths = text.split(separator: "\n").map { $0.count }
+        let lengths = text.components(separatedBy: "\n").filter { !$0.isEmpty }.map { $0.count }
         XCTAssertEqual(Set(lengths).count, 1)
         XCTAssertFalse(text.contains("%.2f"))
     }
