@@ -21,6 +21,7 @@ actor SessionCoordinator {
     private var schedules: [UUID: (generation: UUID, task: Task<Void, Never>)] = [:]
     private var renewals: [UUID: Task<OAuthCredential, Error>] = [:]
     private var nextAllowed: [UUID: Date] = [:]
+    private var reconnecting: Set<UUID> = []
     private var failures: [UUID: Int] = [:]
 
     init(cache: CredentialCache, automaticRenewal: Bool = true,
@@ -46,30 +47,38 @@ actor SessionCoordinator {
         guard accounts[account.id] != nil else { throw CancellationError() }
         let credential = try await cache.read(for: account)
         guard accounts[account.id] != nil else { throw CancellationError() }
-        if schedules[account.id] == nil { schedule(account, credential: credential) }
+        if schedules[account.id] == nil { await schedule(account, credential: credential) }
         return credential
     }
+
+    func requiresPermission(for account: Account) async -> Bool { await cache.requiresPermission(for: account) }
 
     func reload(_ account: Account) async throws -> OAuthCredential {
         guard accounts[account.id] != nil else { throw CancellationError() }
         let credential = try await cache.reload(for: account)
         guard accounts[account.id] != nil else { throw CancellationError() }
-        schedule(account, credential: credential)
+        await schedule(account, credential: credential)
         return credential
     }
 
     func reconnect(_ account: Account) async throws {
+        guard accounts[account.id] != nil, reconnecting.insert(account.id).inserted else { throw CancellationError() }
+        defer { reconnecting.remove(account.id) }
+        schedules.removeValue(forKey: account.id)?.task.cancel()
         if let pending = renewals[account.id] { _ = await pending.result }
-        _ = try await reload(account)
+        guard accounts[account.id] != nil else { throw CancellationError() }
+        try await cache.authorize(for: account)
+        guard accounts[account.id] != nil else { throw CancellationError() }
         nextAllowed[account.id] = nil
         failures[account.id] = nil
         let credential = try await cache.read(for: account)
-        schedule(account, credential: credential)
+        reconnecting.remove(account.id)
+        await schedule(account, credential: credential)
     }
 
     func remember(_ credential: OAuthCredential, for account: Account) async {
         await cache.remember(credential, for: account)
-        if accounts[account.id] != nil { schedule(account, credential: credential) }
+        if accounts[account.id] != nil { await schedule(account, credential: credential) }
     }
 
     func forget(_ account: Account) async throws {
@@ -86,6 +95,9 @@ actor SessionCoordinator {
 
     func renew(_ account: Account, force: Bool = false) async throws -> OAuthCredential {
         guard accounts[account.id] != nil else { throw CancellationError() }
+        guard !reconnecting.contains(account.id) else { throw CancellationError() }
+        guard !(await cache.requiresPermission(for: account)) else { throw CredentialStoreError.permissionRequired }
+        guard accounts[account.id] != nil, !reconnecting.contains(account.id) else { throw CancellationError() }
         if let pending = renewals[account.id] { return try await pending.value }
         if let next = nextAllowed[account.id], next > Date() { throw LoginRefreshError.failed }
         let task = Task { [cache, renewAction] in
@@ -94,6 +106,7 @@ actor SessionCoordinator {
                 return credential
             }
             try Task.checkCancellation()
+            guard !(await cache.requiresPermission(for: account)) else { throw CredentialStoreError.permissionRequired }
             try await renewAction(account, credential)
             try Task.checkCancellation()
             let renewed = try await cache.reload(for: account)
@@ -109,7 +122,7 @@ actor SessionCoordinator {
             guard accounts[account.id] != nil else { throw CancellationError() }
             failures[account.id] = 0
             nextAllowed[account.id] = Date().addingTimeInterval(60)
-            schedule(account, credential: credential)
+            await schedule(account, credential: credential)
             return credential
         } catch {
             renewals[account.id] = nil
@@ -117,13 +130,15 @@ actor SessionCoordinator {
                 let count = (failures[account.id] ?? 0) + 1
                 failures[account.id] = count
                 nextAllowed[account.id] = Date().addingTimeInterval(RenewalPolicy.retryDelay(failures: count))
-                if let current = try? await cache.read(for: account) { schedule(account, credential: current) }
+                if let current = try? await cache.read(for: account) { await schedule(account, credential: current) }
             }
             throw error
         }
     }
 
-    private func schedule(_ account: Account, credential: OAuthCredential) {
+    private func schedule(_ account: Account, credential: OAuthCredential) async {
+        schedules.removeValue(forKey: account.id)?.task.cancel()
+        guard !(await cache.requiresPermission(for: account)), !reconnecting.contains(account.id) else { return }
         guard automaticRenewal, accounts[account.id] != nil, credential.expiresAt > 0,
               credential.refreshToken?.isEmpty == false, credential.scopes?.isEmpty == false else { return }
         schedules[account.id]?.task.cancel()

@@ -23,6 +23,7 @@ enum AppLanguage: String, CaseIterable {
 }
 
 enum L10nKey {
+    case credentialPermissionRequired, grantCredentialAccess, lastKnownUsage
     case noAccounts, refreshNow, accounts, quit, loading, error
     case fiveHour, sevenDay, sevenDaySonnet, sevenDayOpus, oauthApps, cowork, updated
     case addProfile, removeAccount, pickerTitle, select
@@ -80,6 +81,9 @@ enum L10n {
             .journalMissing: "Veri yok",
             .journalSpent: "Harcama ($)",
             .journalBudget: "Limit ($)",
+            .credentialPermissionRequired: "Erişim izni gerekiyor",
+            .grantCredentialAccess: "Erişime izin ver…",
+            .lastKnownUsage: "Son başarılı ölçüm (güncel değil)",
             .journalOpen: "Kullanım günlüğünü aç",
             .journalWriteFailed: "Günlük klasörüne erişilemedi veya kayıt yazılamadı. Disk alanını ve izinleri kontrol et.",
             .journalSampled: "Ölçüm zamanı: %@",
@@ -157,6 +161,9 @@ enum L10n {
             .journalMissing: "No data",
             .journalSpent: "Spent ($)",
             .journalBudget: "Limit ($)",
+            .credentialPermissionRequired: "Access permission required",
+            .grantCredentialAccess: "Allow access…",
+            .lastKnownUsage: "Last successful measurement (not current)",
             .journalOpen: "Open Usage Journal",
             .journalWriteFailed: "Could not access the journal folder or write a record. Check disk space and permissions.",
             .journalSampled: "Measured at: %@",
@@ -234,6 +241,9 @@ enum L10n {
             .journalMissing: "Indisponible",
             .journalSpent: "Dépense ($)",
             .journalBudget: "Limite ($)",
+            .credentialPermissionRequired: "Autorisation d’accès requise",
+            .grantCredentialAccess: "Autoriser l’accès…",
+            .lastKnownUsage: "Dernière mesure réussie (non actuelle)",
             .journalOpen: "Ouvrir le journal d’utilisation",
             .journalWriteFailed: "Impossible d’accéder au journal ou d’écrire une entrée. Vérifiez l’espace disque et les autorisations.",
             .journalSampled: "Mesure effectuée à : %@",
@@ -311,6 +321,9 @@ enum L10n {
             .journalMissing: "Sin datos",
             .journalSpent: "Gasto ($)",
             .journalBudget: "Límite ($)",
+            .credentialPermissionRequired: "Se requiere permiso de acceso",
+            .grantCredentialAccess: "Permitir acceso…",
+            .lastKnownUsage: "Última medición correcta (no actual)",
             .journalOpen: "Abrir diario de uso",
             .journalWriteFailed: "No se pudo acceder al diario o escribir una entrada. Revisa el espacio en disco y los permisos.",
             .journalSampled: "Medición realizada: %@",

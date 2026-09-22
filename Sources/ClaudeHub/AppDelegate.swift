@@ -5,6 +5,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accountStore = AccountStore()
     private let client = AnthropicClient()
     private var accounts: [Account] = []
+    private var permissionRequired: Set<UUID> = []
+    private var authorizationInProgress = false
+    private var lastSnapshots: [UUID: AccountSnapshot] = [:]
     private var states: [UUID: AccountState] = [:]
     private var statusItem: NSStatusItem!
     private var refreshTimer: Timer?
@@ -17,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var journalFailures: Set<UUID> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(self, selector: #selector(permissionChanged(_:)), name: .credentialPermissionRequired, object: nil)
         do { accounts = try accountStore.load() } catch {
             accountStoreAvailable = false
         }
@@ -70,28 +74,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func accountMenuItem(_ account: Account) -> NSMenuItem {
         let item = NSMenuItem(title: account.label, action: nil, keyEquivalent: "")
         let submenu = NSMenu()
+        if permissionRequired.contains(account.id) {
+            addDisabled(L10n.text(.credentialPermissionRequired), to: submenu)
+            let allow = NSMenuItem(title: L10n.text(.grantCredentialAccess), action: #selector(reconnectAccountPressed(_:)), keyEquivalent: "")
+            allow.target = self
+            allow.representedObject = account.id.uuidString
+            submenu.addItem(allow)
+            submenu.addItem(.separator())
+        }
         switch states[account.id] ?? .loading {
         case .loading:
             addDisabled(L10n.text(.loading), to: submenu)
         case .failed(let message):
-            addDisabled(L10n.format(.error, message), to: submenu)
+            if permissionRequired.contains(account.id) {
+                if let snapshot = lastSnapshots[account.id] {
+                    addDisabled(L10n.text(.lastKnownUsage), to: submenu)
+                    addSnapshot(snapshot, to: submenu)
+                }
+            } else {
+                addDisabled(L10n.format(.error, message), to: submenu)
+            }
         case .loaded(let snapshot):
-            if let email = snapshot.email { addDisabled(email, to: submenu) }
-            if OAuthCredential.needsRefreshTokenWarning(expiresAt: snapshot.refreshTokenExpiresAt) {
-                addDisabled(L10n.text(.refreshTokenExpiring), to: submenu)
-            }
-            addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: submenu)
-            addWindow(L10n.text(.sevenDay), snapshot.usage.sevenDay, to: submenu)
-            addWindow(L10n.text(.sevenDaySonnet), snapshot.usage.sevenDaySonnet, to: submenu)
-            addWindow(L10n.text(.sevenDayOpus), snapshot.usage.sevenDayOpus, to: submenu)
-            addWindow(L10n.text(.oauthApps), snapshot.usage.sevenDayOAuthApps, to: submenu)
-            addWindow(L10n.text(.cowork), snapshot.usage.sevenDayCowork, to: submenu)
-            if let extra = snapshot.usage.extraUsage.flatMap(UsageFormatting.extraUsage) {
-                addDisabled(extra, to: submenu)
-            }
-            let formatter = DateFormatter()
-            formatter.timeStyle = .short
-            addDisabled(L10n.format(.updated, formatter.string(from: snapshot.fetchedAt)), to: submenu)
+            addSnapshot(snapshot, to: submenu)
         }
         submenu.addItem(.separator())
         if journalFailures.contains(account.id) { addDisabled(L10n.text(.journalWriteFailed), to: submenu) }
@@ -101,6 +105,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         submenu.addItem(journal)
         item.submenu = submenu
         return item
+    }
+
+    private func addSnapshot(_ snapshot: AccountSnapshot, to menu: NSMenu) {
+        if let email = snapshot.email { addDisabled(email, to: menu) }
+        if OAuthCredential.needsRefreshTokenWarning(expiresAt: snapshot.refreshTokenExpiresAt) {
+            addDisabled(L10n.text(.refreshTokenExpiring), to: menu)
+        }
+        addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: menu)
+        addWindow(L10n.text(.sevenDay), snapshot.usage.sevenDay, to: menu)
+        addWindow(L10n.text(.sevenDaySonnet), snapshot.usage.sevenDaySonnet, to: menu)
+        addWindow(L10n.text(.sevenDayOpus), snapshot.usage.sevenDayOpus, to: menu)
+        addWindow(L10n.text(.oauthApps), snapshot.usage.sevenDayOAuthApps, to: menu)
+        addWindow(L10n.text(.cowork), snapshot.usage.sevenDayCowork, to: menu)
+        if let extra = snapshot.usage.extraUsage.flatMap(UsageFormatting.extraUsage) {
+            addDisabled(extra, to: menu)
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        addDisabled(L10n.format(.updated, formatter.string(from: snapshot.fetchedAt)), to: menu)
+    }
+
+    @objc private func permissionChanged(_ notification: Notification) {
+        guard let id = notification.object as? UUID,
+              let account = accounts.first(where: { $0.id == id }) else { return }
+        Task {
+            let required = await client.requiresPermission(for: account)
+            guard accounts.contains(where: { $0.id == id }) else { return }
+            if required { permissionRequired.insert(id) } else { permissionRequired.remove(id) }
+            rebuildMenu()
+        }
     }
 
     private func accountManagementMenu() -> NSMenu {
@@ -171,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           accounts.contains(where: { $0.id == id }) else { continue }
                     states[id] = state
                     if case .loaded(let snapshot) = state {
+                        lastSnapshots[id] = snapshot
                         journalSamples[id] = snapshot
                     } else {
                         journalSamples[id] = nil
@@ -182,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func addAccountPressed() {
-        guard accountStoreAvailable else { return }
+        guard accountStoreAvailable, !authorizationInProgress else { return }
         let picker = NSOpenPanel()
         picker.title = L10n.text(.pickerTitle)
         picker.prompt = L10n.text(.select)
@@ -220,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let account = Account(label: label, configDirectory: path)
         do {
-            let credential = try CredentialStore().read(for: account)
+            let credential = try CredentialStore().read(for: account, interaction: .userInitiated)
             let updated = accounts + [account]
             try accountStore.save(updated)
             accounts = updated
@@ -254,6 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         accounts = updated
         states[id] = nil
+        lastSnapshots[id] = nil
+        permissionRequired.remove(id)
         journalSamples[id] = nil
         journalFailures.remove(id)
         Task {
@@ -268,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshTask?.cancel()
         refreshTimer?.invalidate()
         journalSchedule?.stop()
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func recordHourlyUsage(_ scheduled: Date) {
@@ -299,15 +338,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func reconnectAccountPressed(_ sender: NSMenuItem) {
-        guard let rawID = sender.representedObject as? String,
+        guard !authorizationInProgress,
+              let rawID = sender.representedObject as? String,
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id }) else { return }
+        authorizationInProgress = true
         Task {
+            defer { authorizationInProgress = false }
             do {
                 try await client.reconnect(account)
+                permissionRequired.remove(id)
                 refreshAll()
             } catch is CancellationError { } catch {
-                showError(error.localizedDescription)
+                if CredentialStoreError.requiresPermission(error) {
+                    permissionRequired.insert(id)
+                    rebuildMenu()
+                } else { showError(error.localizedDescription) }
             }
         }
     }
