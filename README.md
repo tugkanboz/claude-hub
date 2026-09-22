@@ -108,14 +108,32 @@ Claude Code stores the credentials for every isolated profile in macOS
 Keychain. ClaudeHub imports a profile's credential and keeps its own copy under
 the Keychain service `com.tugkanboz.claudehub.credentials`, identified by the
 account's stable UUID. It uses this copy after a restart and an in-memory cache
-while running. Existing profiles are imported on first use after upgrading.
+while running. Existing profiles are imported on first use after upgrading if
+macOS permits access without interaction.
 
-macOS may ask for permission when importing a Claude Code credential. Choose
-**Always Allow** only if you trust the installed build. Claude Code can replace
-its Keychain item during renewal, so a later import can require permission
-again. The private copy reduces repeated startup reads; it does not guarantee
-that macOS will never show another permission prompt. Local ad-hoc builds and
-the published Developer ID-signed app can also have different access rights.
+ClaudeHub performs background Keychain reads, writes and cleanup without
+requesting a password dialog. If macOS requires authorization, the account
+shows **Access permission required** and **Allow access…** in its submenu.
+Automatic credential access and renewal for that account pause until you
+choose this action. Other accounts continue working. **Refresh Now** does not
+request authorization or repeatedly retry a denied Keychain read.
+
+A valid token already in memory can still fetch usage while permission is
+pending. If fetching fails, the last successful measurement is shown with its
+date and time and explicitly marked as not current. It is not written to the
+usage journal as a fresh measurement. Cancelling authorization keeps the
+account paused. Allowing access imports the latest credential and resumes its
+renewal schedule; it does not extend a revoked or expired login.
+
+Adding or reconnecting a profile is an explicit action and may display macOS
+permission dialogs, including a separate request to update ClaudeHub's own
+copy. Choose **Always Allow** only if you trust the installed build. This does
+not grant permanent access to replacement Claude Code items. Local ad-hoc
+builds and Developer ID-signed releases can have different access rights.
+
+The suppression applies to Security calls made by ClaudeHub. The separately
+installed Claude Code CLI and macOS itself control their own dialogs; this
+change does not promise that those processes will never ask for permission.
 
 The regular five-minute usage refresh uses the credential already held in
 memory. It does not read Keychain again on every refresh.
@@ -178,7 +196,7 @@ Open ClaudeHub again after signing in to macOS. If you want it to start
 automatically, add ClaudeHub under **System Settings > General > Login Items**.
 Profiles normally load from ClaudeHub's own Keychain copy. Locked Keychains,
 changes to the app's signature and importing a replaced Claude Code item can
-still require permission. A restart does not extend an expired or revoked
+still require permission through **Allow access…**. A restart does not extend an expired or revoked
 refresh token; use the reconnect instructions if necessary.
 
 ## Languages
@@ -220,7 +238,9 @@ Before releasing changes to credential handling, test the signed app on a Mac:
 4. Let a profile reach renewal time while it is not being used in Terminal.
    Verify renewal still happens without a manual usage refresh.
 5. Sleep and wake the Mac across a renewal deadline, then check the profile.
-6. Deny a Keychain read and disconnect the network. Confirm errors are bounded
+6. Deny access, repeatedly refresh, then allow it from the account submenu.
+   Confirm background reads stay paused, other profiles continue and stale
+   measurements are labelled. Also disconnect the network. Confirm errors are bounded
    and the app remains responsive. Restore access and reconnect.
 7. Repeatedly press Refresh Now while removing a profile. Confirm cancelled
    work does not restore a removed account or overwrite newer results.

@@ -36,6 +36,7 @@ struct AnthropicClient {
             let latest: OAuthCredential
             do { latest = try await sessions.reload(account) } catch {
                 try Task.checkCancellation()
+                if CredentialStoreError.requiresPermission(error) { throw CredentialStoreError.permissionRequired }
                 AppLogger.write("[warn] Could not reload credentials after HTTP 401")
                 throw AnthropicClientError.http(401)
             }
@@ -44,6 +45,7 @@ struct AnthropicClient {
                 let renewed: OAuthCredential
                 do { renewed = try await sessions.renew(account, force: true) } catch {
                     try Task.checkCancellation()
+                    if CredentialStoreError.requiresPermission(error) { throw CredentialStoreError.permissionRequired }
                     AppLogger.write("[warn] Could not renew credentials after HTTP 401")
                     throw AnthropicClientError.http(401)
                 }
@@ -60,6 +62,8 @@ struct AnthropicClient {
     func forget(_ account: Account) async throws {
         try await sessions.forget(account)
     }
+
+    func requiresPermission(for account: Account) async -> Bool { await sessions.requiresPermission(for: account) }
 
     func reconnect(_ account: Account) async throws { try await sessions.reconnect(account) }
 

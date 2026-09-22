@@ -152,7 +152,7 @@ final class SessionTests: XCTestCase {
             throw AnthropicClientError.http(401)
         }
         await client.configure(accounts: [account])
-        do { _ = try await client.snapshot(for: account); XCTFail("Expected failure") } catch AnthropicClientError.http(401) { }
+        do { _ = try await client.snapshot(for: account); XCTFail("Expected failure") } catch CredentialStoreError.permissionRequired { }
         let recorded = await attempts.tokens
         XCTAssertEqual(recorded.count, 1)
     }
