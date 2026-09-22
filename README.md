@@ -41,6 +41,7 @@ to check the remaining limits.
 - **Automatic refresh:** Usage is refreshed every five minutes.
 - **Automatic token renewal:** Normal OAuth sessions are renewed through the installed Claude Code CLI.
 - **Expiry warnings:** Profiles show a warning when a known refresh-token expiry is less than five days away.
+- **Hourly usage journal:** Read changes, reset times and observation gaps in a local journal for each account.
 - **Native macOS interface:** ClaudeHub is written in Swift and AppKit for Apple Silicon.
 - **No tracking:** There is no telemetry, advertising or third-party analytics SDK.
 
@@ -226,6 +227,72 @@ Before releasing changes to credential handling, test the signed app on a Mac:
 
 Automated tests use fake credentials and do not access personal tokens. They
 cannot verify macOS permission dialogs or Anthropic's live renewal behavior.
+
+## Hourly usage journal
+
+While the Mac is awake and ClaudeHub is running, a journal entry is saved at
+each local hour boundary, such as 09:00 or 10:00. Starting the app at 10:25
+means the first entry is at 11:00. Sleeping, shutting down or quitting the app
+leaves a gap. ClaudeHub does not wake the Mac or fill in missed hours when it
+resumes. A timer delayed by a minute or more is skipped too.
+
+The journal reuses the most recent successful five-minute usage query. It does
+not make extra API requests or read Keychain. Each entry includes both the hour
+being recorded and the actual measurement time. A sample older than six minutes
+is marked unavailable; an old percentage is never presented as a new measurement.
+Usage polling and token renewal keep their existing independent schedules.
+
+Open an account's submenu and choose **Open Usage Journal** to see its files:
+
+```text
+~/.claude-usage/ClaudeHub/<account-UUID>/2026-09-22.log
+~/.claude-usage/ClaudeHub/<account-UUID>/2026-09-22.json
+```
+
+The `.log` file is a plain-text table without commentary. Percentages and costs
+are right-aligned; every column has one width throughout the daily file, so
+`1.0%`, `25.0%` and `100.0%` do not shift the separators. Open it in a monospaced
+font with line wrapping disabled. Missing values appear as `-`, not zero.
+Each usage window has its own row; extra usage adds cost columns when available.
+Headers and status labels follow the app's Turkish, English, French or Spanish
+language. Existing entries in the current daily log are rendered as a table on
+the next journal write; older files are left unchanged.
+
+The `.json` file retains measurements and explanations for later analysis.
+Files are grouped by UTC date; table timestamps include the local UTC offset.
+
+Example percentage alignment (the full log also includes measurement and reset timestamps):
+
+```text
+|-------|---------|--------|
+| Time  | Period  | Usage  |
+|-------|---------|--------|
+| 09:00 | 5 hours |   1.0% |
+| 10:00 | 5 hours |  25.0% |
+| 11:00 | 5 hours | 100.0% |
+|-------|---------|--------|
+```
+
+JSON explanations distinguish first observations, unchanged usage, increases, reported
+decreases, approaching limits, changed reset times and recovery after missing
+data. Deltas are only calculated between consecutive available hourly records
+with matching known reset times. A gap or a changed period does not produce a
+made-up consumption total. These percentages describe limit utilization, not
+token counts, costs or which project consumed the allowance.
+
+Journal files contain account UUIDs, timestamps, usage windows, extra-usage data
+when provided, and explanations. Account names, email addresses, organization
+IDs, profile paths and credentials are not included. Files are written in the
+background. Only the current day's entries are kept in the writer's cache;
+history is loaded once per account after launch for comparisons.
+
+The latest 30 UTC calendar days are retained. Cleanup runs at most once per day
+when a record is written and only removes dated journal files inside ClaudeHub's
+UUID account folders. Removing an account does not immediately erase its history;
+you can delete its journal folder yourself. If no more records are written,
+automatic cleanup waits until recording resumes. Existing corrupt JSON is not
+overwritten; move the damaged file out of the folder before restarting the app
+to resume recording. A write failure is shown in the account submenu.
 
 ## Account-file recovery and logs
 

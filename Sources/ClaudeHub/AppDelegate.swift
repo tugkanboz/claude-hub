@@ -11,6 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var accountStoreAvailable = true
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration = RefreshGeneration()
+    private let usageJournal = UsageJournalStore()
+    private var journalSchedule: HourlyJournalSchedule?
+    private var journalSamples: [UUID: AccountSnapshot] = [:]
+    private var journalFailures: Set<UUID> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do { accounts = try accountStore.load() } catch {
@@ -32,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             userInfo: nil,
             repeats: true
         )
+        journalSchedule = HourlyJournalSchedule { [weak self] scheduled in self?.recordHourlyUsage(scheduled) }
+        journalSchedule?.start()
     }
 
     private func rebuildMenu() {
@@ -87,6 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             formatter.timeStyle = .short
             addDisabled(L10n.format(.updated, formatter.string(from: snapshot.fetchedAt)), to: submenu)
         }
+        submenu.addItem(.separator())
+        if journalFailures.contains(account.id) { addDisabled(L10n.text(.journalWriteFailed), to: submenu) }
+        let journal = NSMenuItem(title: L10n.text(.journalOpen), action: #selector(openJournalPressed(_:)), keyEquivalent: "")
+        journal.target = self
+        journal.representedObject = account.id.uuidString
+        submenu.addItem(journal)
         item.submenu = submenu
         return item
     }
@@ -158,6 +170,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           refreshGeneration.accepts(generation),
                           accounts.contains(where: { $0.id == id }) else { continue }
                     states[id] = state
+                    if case .loaded(let snapshot) = state {
+                        journalSamples[id] = snapshot
+                    } else {
+                        journalSamples[id] = nil
+                    }
                     rebuildMenu()
                 }
             }
@@ -237,6 +254,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         accounts = updated
         states[id] = nil
+        journalSamples[id] = nil
+        journalFailures.remove(id)
         Task {
             do { try await client.forget(account) } catch {
                 showError(L10n.text(.credentialCleanupFailed))
@@ -248,6 +267,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         refreshTask?.cancel()
         refreshTimer?.invalidate()
+        journalSchedule?.stop()
+    }
+
+    private func recordHourlyUsage(_ scheduled: Date) {
+        let now = Date()
+        let samples = accounts.map { ($0.id, journalSamples[$0.id]) }
+        let language = L10n.language
+        Task {
+            for (id, snapshot) in samples {
+                do {
+                    try await usageJournal.record(accountID: id, scheduled: scheduled, now: now, snapshot: snapshot, language: language)
+                    journalFailures.remove(id)
+                } catch {
+                    if accounts.contains(where: { $0.id == id }) { journalFailures.insert(id) }
+                    AppLogger.write("[warn] Could not write hourly usage journal; existing records preserved")
+                }
+            }
+            rebuildMenu()
+        }
+    }
+
+    @objc private func openJournalPressed(_ sender: NSMenuItem) {
+        guard let rawID = sender.representedObject as? String, let id = UUID(uuidString: rawID),
+              accounts.contains(where: { $0.id == id }) else { return }
+        let directory = UsageJournalStore.directory.appendingPathComponent(id.uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            if !NSWorkspace.shared.open(directory) { showError(L10n.text(.journalWriteFailed)) }
+        } catch { showError(L10n.text(.journalWriteFailed)) }
     }
 
     @objc private func reconnectAccountPressed(_ sender: NSMenuItem) {
