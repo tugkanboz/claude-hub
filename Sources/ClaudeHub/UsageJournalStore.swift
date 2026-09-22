@@ -59,6 +59,10 @@ actor UsageJournalStore {
             if entry.status == "available" { previousSuccess[accountID] = entry }
         }
         days[accountID] = (day, entries)
+        if let latest = entries.last(where: { $0.scheduledAt <= scheduled }) { previous[accountID] = latest }
+        if let success = entries.last(where: { $0.scheduledAt <= scheduled && $0.status == "available" }) {
+            previousSuccess[accountID] = success
+        }
         let readable = entries.map { entry in
             "\(UsageJournalSummary.timestamp(entry.scheduledAt)) · ClaudeHub · \(entry.accountID.uuidString.prefix(8))\n"
                 + entry.summary.map { "  " + $0 }.joined(separator: "\n") + "\n"
