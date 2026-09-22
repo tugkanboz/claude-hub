@@ -4,6 +4,7 @@ import XCTest
 final class ClaudeHubTests: XCTestCase {
     func testProfileServiceNameIsStable() {
         let work = CredentialStore.serviceName(for: "/Users/example/.claude-accounts/work")
+        XCTAssertEqual(work, "Claude Code-credentials-ce139327")
         XCTAssertEqual(work, CredentialStore.serviceName(for: "/Users/example/.claude-accounts/work"))
         XCTAssertNotEqual(work, CredentialStore.serviceName(for: "/Users/example/.claude-accounts/personal"))
     }
@@ -21,7 +22,7 @@ final class ClaudeHubTests: XCTestCase {
         XCTAssertEqual(first.accessToken, second.accessToken)
         XCTAssertEqual(counter.count, 1)
 
-        await cache.remove(for: account)
+        try await cache.remove(for: account)
         _ = try await cache.read(for: account)
         XCTAssertEqual(counter.count, 2)
     }

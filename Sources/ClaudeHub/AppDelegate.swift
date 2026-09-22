@@ -8,9 +8,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var states: [UUID: AccountState] = [:]
     private var statusItem: NSStatusItem!
     private var refreshTimer: Timer?
+    private var accountStoreAvailable = true
+    private var refreshTask: Task<Void, Never>?
+    private var refreshGeneration = RefreshGeneration()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        accounts = accountStore.load()
+        do { accounts = try accountStore.load() } catch {
+            accountStoreAvailable = false
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = ""
         statusItem.button?.imagePosition = .imageOnly
@@ -18,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.setAccessibilityLabel("ClaudeHub")
         statusItem.button?.image = Self.menuIcon()
         rebuildMenu()
+        if !accountStoreAvailable { showError(L10n.text(.accountStoreUnavailable)) }
         refreshAll()
         refreshTimer = Timer.scheduledTimer(
             timeInterval: 300,
@@ -65,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             addDisabled(L10n.format(.error, message), to: submenu)
         case .loaded(let snapshot):
             if let email = snapshot.email { addDisabled(email, to: submenu) }
+            if OAuthCredential.needsRefreshTokenWarning(expiresAt: snapshot.refreshTokenExpiresAt) {
+                addDisabled(L10n.text(.refreshTokenExpiring), to: submenu)
+            }
             addWindow(L10n.text(.fiveHour), snapshot.usage.fiveHour, to: submenu)
             addWindow(L10n.text(.sevenDay), snapshot.usage.sevenDay, to: submenu)
             addWindow(L10n.text(.sevenDaySonnet), snapshot.usage.sevenDaySonnet, to: submenu)
@@ -84,11 +93,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func accountManagementMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         let add = NSMenuItem(title: L10n.text(.addProfile), action: #selector(addAccountPressed), keyEquivalent: "")
         add.target = self
+        add.isEnabled = accountStoreAvailable
         menu.addItem(add)
 
         if !accounts.isEmpty {
+            let reconnect = NSMenuItem(title: L10n.text(.reconnectProfile), action: nil, keyEquivalent: "")
+            let reconnectMenu = NSMenu()
+            for account in accounts {
+                let candidate = NSMenuItem(title: account.label, action: #selector(reconnectAccountPressed(_:)), keyEquivalent: "")
+                candidate.target = self
+                candidate.representedObject = account.id.uuidString
+                reconnectMenu.addItem(candidate)
+            }
+            reconnect.submenu = reconnectMenu
+            menu.addItem(reconnect)
             let remove = NSMenuItem(title: L10n.text(.removeAccount), action: nil, keyEquivalent: "")
             let removeMenu = NSMenu()
             for account in accounts {
@@ -112,23 +133,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func timerFired() { refreshAll() }
 
     private func refreshAll() {
+        refreshTask?.cancel()
+        let generation = refreshGeneration.advance()
+        let requestedAccounts = accounts
         for account in accounts { states[account.id] = .loading }
         rebuildMenu()
-        Task {
-            for account in accounts {
-                do {
-                    states[account.id] = .loaded(try await client.snapshot(for: account))
-                } catch {
-                    let message = error.localizedDescription
-                    states[account.id] = .failed(message)
-                    AppLogger.write("[warn] \(account.label): \(message)")
+        refreshTask = Task {
+            guard !Task.isCancelled else { return }
+            await client.configure(accounts: requestedAccounts)
+            guard !Task.isCancelled else { return }
+            await withTaskGroup(of: (UUID, AccountState).self) { group in
+                for account in requestedAccounts {
+                    group.addTask { [client] in
+                        do {
+                            try Task.checkCancellation()
+                            return (account.id, .loaded(try await client.snapshot(for: account)))
+                        } catch {
+                            return (account.id, .failed(error.localizedDescription))
+                        }
+                    }
                 }
-                rebuildMenu()
+                for await (id, state) in group {
+                    guard !Task.isCancelled,
+                          refreshGeneration.accepts(generation),
+                          accounts.contains(where: { $0.id == id }) else { continue }
+                    states[id] = state
+                    rebuildMenu()
+                }
             }
         }
     }
 
     @objc private func addAccountPressed() {
+        guard accountStoreAvailable else { return }
         let picker = NSOpenPanel()
         picker.title = L10n.text(.pickerTitle)
         picker.prompt = L10n.text(.select)
@@ -139,12 +176,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent(".claude-accounts", isDirectory: true)
         guard picker.runModal() == .OK, let url = picker.url else { return }
 
-        let path = url.path
-        guard FileManager.default.fileExists(atPath: url.appendingPathComponent(".claude.json").path) else {
+        let normalizedURL = url.standardizedFileURL.resolvingSymlinksInPath()
+        let path = normalizedURL.path
+        guard FileManager.default.fileExists(atPath: normalizedURL.appendingPathComponent(".claude.json").path) else {
             showError(L10n.text(.missingClaudeJSON))
             return
         }
-        if accounts.contains(where: { $0.configDirectory == path }) {
+        if accounts.contains(where: {
+            URL(fileURLWithPath: $0.configDirectory).standardizedFileURL.resolvingSymlinksInPath().path == path
+        }) {
             showError(L10n.text(.profileAlreadyAdded))
             return
         }
@@ -164,11 +204,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let account = Account(label: label, configDirectory: path)
         do {
             let credential = try CredentialStore().read(for: account)
-            accounts.append(account)
-            try accountStore.save(accounts)
+            let updated = accounts + [account]
+            try accountStore.save(updated)
+            accounts = updated
             states[account.id] = .loading
             rebuildMenu()
             Task {
+                guard accounts.contains(where: { $0.id == account.id }) else { return }
                 await client.remember(credential, for: account)
                 refreshAll()
             }
@@ -182,11 +224,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id })
         else { return }
-        accounts.removeAll { $0.id == id }
+        let confirmation = NSAlert()
+        confirmation.messageText = L10n.format(.confirmRemoveAccount, account.label)
+        confirmation.informativeText = L10n.text(.removeAccountHelp)
+        confirmation.addButton(withTitle: L10n.text(.cancel))
+        confirmation.addButton(withTitle: L10n.text(.removeAccount))
+        guard confirmation.runModal() == .alertSecondButtonReturn else { return }
+        let updated = accounts.filter { $0.id != id }
+        do { try accountStore.save(updated) } catch {
+            showError(error.localizedDescription)
+            return
+        }
+        accounts = updated
         states[id] = nil
-        Task { await client.forget(account) }
-        do { try accountStore.save(accounts) } catch { showError(error.localizedDescription) }
-        rebuildMenu()
+        Task {
+            do { try await client.forget(account) } catch {
+                showError(L10n.text(.credentialCleanupFailed))
+            }
+        }
+        refreshAll()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        refreshTask?.cancel()
+        refreshTimer?.invalidate()
+    }
+
+    @objc private func reconnectAccountPressed(_ sender: NSMenuItem) {
+        guard let rawID = sender.representedObject as? String,
+              let id = UUID(uuidString: rawID),
+              let account = accounts.first(where: { $0.id == id }) else { return }
+        Task {
+            do {
+                try await client.reconnect(account)
+                refreshAll()
+            } catch is CancellationError { } catch {
+                showError(error.localizedDescription)
+            }
+        }
     }
 
     @objc private func quitPressed() { NSApplication.shared.terminate(nil) }

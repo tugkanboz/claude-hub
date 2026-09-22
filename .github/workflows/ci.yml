@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "rewrite/**"]
+    branches: [main, "rewrite/**", "fix/profile-lifecycle"]
   pull_request:
 
 permissions:
@@ -40,6 +40,12 @@ jobs:
           exit 1
       - name: Build and verify app bundle
         run: bash scripts/build-app.sh
+      - name: Repeat tests
+        run: swift test --skip-build
+      - name: Verify bundled icon
+        run: |
+          test -s dist/ClaudeHub.app/Contents/Resources/AppIcon.icns
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIconFile' dist/ClaudeHub.app/Contents/Info.plist)" = AppIcon.icns
       - name: Package DMG
         run: bash scripts/package-dmg.sh
       - name: Verify disk image
