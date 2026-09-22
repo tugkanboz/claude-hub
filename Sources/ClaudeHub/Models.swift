@@ -68,7 +68,7 @@ struct UsageWindow: Decodable, Equatable {
     }
 }
 
-struct ExtraUsage: Decodable, Equatable {
+struct ExtraUsage: Codable, Equatable {
     let isEnabled: Bool
     let monthlyLimit: Int?
     let usedCredits: Double?
