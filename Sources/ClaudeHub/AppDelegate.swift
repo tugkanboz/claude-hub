@@ -94,6 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 addDisabled(L10n.format(.error, message), to: submenu)
             }
+        case .rateLimited(let retry):
+            addDisabled(AnthropicClientError.rateLimited(until: retry).localizedDescription, to: submenu)
+            if let snapshot = lastSnapshots[account.id] {
+                addDisabled(L10n.text(.lastKnownUsage), to: submenu)
+                addSnapshot(snapshot, to: submenu)
+            }
         case .loaded(let snapshot):
             addSnapshot(snapshot, to: submenu)
         }
@@ -195,6 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         do {
                             try Task.checkCancellation()
                             return (account.id, .loaded(try await client.snapshot(for: account)))
+                        } catch AnthropicClientError.rateLimited(let retry) {
+                            return (account.id, .rateLimited(retry))
                         } catch {
                             return (account.id, .failed(error.localizedDescription))
                         }
@@ -342,6 +350,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let rawID = sender.representedObject as? String,
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id }) else { return }
+        lastSnapshots[id] = nil
+        journalSamples[id] = nil
         authorizationInProgress = true
         Task {
             defer { authorizationInProgress = false }

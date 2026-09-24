@@ -248,6 +248,32 @@ Before releasing changes to credential handling, test the signed app on a Mac:
 Automated tests use fake credentials and do not access personal tokens. They
 cannot verify macOS permission dialogs or Anthropic's live renewal behavior.
 
+## Request limits and refresh behavior
+
+ClaudeHub normally fetches usage every five minutes. Profile information is
+cached in memory for six hours instead of being fetched with every usage poll.
+Reconnecting a profile or receiving HTTP 401 invalidates that profile cache.
+
+If either endpoint returns HTTP 429, requests for that account pause until the
+server's `Retry-After` time, when provided as seconds or an HTTP date. If the
+header is missing or invalid, the delay starts at about one minute and doubles
+with a small random offset, up to 30 minutes. A successful query resets this
+backoff. Other accounts and the independent token-renewal schedule continue.
+The next regular poll at or after the deadline retries; the displayed time is
+the earliest allowed attempt, not a promise of an exact retry time.
+
+**Refresh Now** respects the same deadline. Concurrent refreshes share one
+request per account, and a successful measurement can be reused for 30 seconds
+without changing its original timestamp. Reconnecting does not bypass an
+existing rate-limit wait. These caches and waits are held in memory.
+
+The menu shows a localized rate-limit message and the earliest retry time.
+When available, the last successful measurement remains visible, explicitly
+marked as not current with its date and time. A failed poll clears the journal's
+current sample, so old measurements are not recorded as fresh hourly data.
+Diagnostic logs include the account UUID, endpoint and retry time; they do not
+include tokens, request headers or raw response bodies.
+
 ## Hourly usage journal
 
 While the Mac is awake and ClaudeHub is running, a journal entry is saved at

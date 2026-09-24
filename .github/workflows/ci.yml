@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "rewrite/**", "fix/profile-lifecycle", "fix/keychain-permission-prompts", "feat/hourly-usage-journal"]
+    branches: [main, "rewrite/**", "fix/profile-lifecycle", "fix/keychain-permission-prompts", "fix/usage-rate-limits", "feat/hourly-usage-journal"]
   pull_request:
 
 permissions:
