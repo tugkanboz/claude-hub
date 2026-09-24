@@ -92,16 +92,19 @@ final class RateLimitTests: XCTestCase {
         let requests = UsageRequestCoordinator()
         await requests.configure([account])
         let started = expectation(description: "Request started")
+        let gate = RateTestGate()
         let first = Task {
             try await requests.snapshot(for: account) {
                 started.fulfill()
-                try await Task.sleep(nanoseconds: 100_000_000)
+                await gate.wait()
                 return try Self.snapshot()
             }
         }
         await fulfillment(of: [started], timeout: 2)
         first.cancel()
-        _ = try await requests.snapshot(for: account) { XCTFail("Must share existing request"); return try Self.snapshot() }
+        let replacement = Task { try await requests.snapshot(for: account) { XCTFail("Must share existing request"); return try Self.snapshot() } }
+        await gate.open()
+        _ = try await replacement.value
         do { _ = try await first.value; XCTFail("Cancelled waiter") } catch is CancellationError { }
     }
 
@@ -197,5 +200,19 @@ private actor RateTestServer {
         let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: limited ? 429 : 200,
             httpVersion: nil, headerFields: limited ? ["Retry-After": "120"] : [:]))
         return (Data(body.utf8), response)
+    }
+}
+
+private actor RateTestGate {
+    private var opened = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func open() {
+        opened = true
+        continuation?.resume()
+        continuation = nil
     }
 }
