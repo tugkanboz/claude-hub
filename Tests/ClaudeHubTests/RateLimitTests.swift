@@ -121,8 +121,8 @@ final class RateLimitTests: XCTestCase {
         let clock = RateTestClock()
         let server = RateTestServer()
         let transport = AnthropicTransport(send: { try await server.send($0) }, now: { clock.now })
-        let first = OAuthCredential(accessToken: "one", refreshToken: nil, expiresAt: 1)
-        let rotated = OAuthCredential(accessToken: "two", refreshToken: nil, expiresAt: 2)
+        let first = OAuthCredential(accessToken: "one", refreshToken: nil, expiresAt: 1, scopes: nil)
+        let rotated = OAuthCredential(accessToken: "two", refreshToken: nil, expiresAt: 2, scopes: nil)
         _ = try await transport.snapshot(for: account, credential: first)
         clock.advance(300)
         _ = try await transport.snapshot(for: account, credential: rotated)
@@ -142,7 +142,7 @@ final class RateLimitTests: XCTestCase {
             let server = RateTestServer(limitedPath: endpoint.rawValue)
             let transport = AnthropicTransport(send: { try await server.send($0) }, now: { clock.now })
             do {
-                _ = try await transport.snapshot(for: account, credential: OAuthCredential(accessToken: "test", refreshToken: nil, expiresAt: 1))
+                _ = try await transport.snapshot(for: account, credential: OAuthCredential(accessToken: "test", refreshToken: nil, expiresAt: 1, scopes: nil))
                 XCTFail("Expected 429")
             } catch AnthropicClientError.rateLimitResponse(let path, let retry) {
                 XCTAssertEqual(path, endpoint)
