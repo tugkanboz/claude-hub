@@ -122,4 +122,5 @@ enum AccountState {
     case loading
     case loaded(AccountSnapshot)
     case failed(String)
+    case rateLimited(Date)
 }

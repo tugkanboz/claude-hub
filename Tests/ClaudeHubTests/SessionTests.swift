@@ -91,7 +91,7 @@ final class SessionTests: XCTestCase {
         let sessions = SessionCoordinator(cache: CredentialCache(loader: { _ in storage.loadSource() }), automaticRenewal: false) { _, _ in XCTFail("Must not renew") }
         let client = AnthropicClient(sessions: sessions) { _ in throw AnthropicClientError.http(429) }
         await client.configure(accounts: [account])
-        do { _ = try await client.snapshot(for: account); XCTFail("Expected 429") } catch AnthropicClientError.http(429) { }
+        do { _ = try await client.snapshot(for: account); XCTFail("Expected 429") } catch AnthropicClientError.rateLimited { }
         XCTAssertEqual(storage.readCount, 1)
     }
 

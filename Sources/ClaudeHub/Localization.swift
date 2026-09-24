@@ -24,6 +24,7 @@ enum AppLanguage: String, CaseIterable {
 
 enum L10nKey {
     case credentialPermissionRequired, grantCredentialAccess, lastKnownUsage
+    case rateLimitedGeneric, rateLimitedUntil
     case noAccounts, refreshNow, accounts, quit, loading, error
     case fiveHour, sevenDay, sevenDaySonnet, sevenDayOpus, oauthApps, cowork, updated
     case addProfile, removeAccount, pickerTitle, select
@@ -84,6 +85,8 @@ enum L10n {
             .credentialPermissionRequired: "Erişim izni gerekiyor",
             .grantCredentialAccess: "Erişime izin ver…",
             .lastKnownUsage: "Son başarılı ölçüm (güncel değil)",
+            .rateLimitedGeneric: "İstek sınırına ulaşıldı. Bir süre sonra yeniden denenecek.",
+            .rateLimitedUntil: "İstek sınırına ulaşıldı. Yeniden deneme en erken: %@",
             .journalOpen: "Kullanım günlüğünü aç",
             .journalWriteFailed: "Günlük klasörüne erişilemedi veya kayıt yazılamadı. Disk alanını ve izinleri kontrol et.",
             .journalSampled: "Ölçüm zamanı: %@",
@@ -164,6 +167,8 @@ enum L10n {
             .credentialPermissionRequired: "Access permission required",
             .grantCredentialAccess: "Allow access…",
             .lastKnownUsage: "Last successful measurement (not current)",
+            .rateLimitedGeneric: "Request limit reached. Retrying later.",
+            .rateLimitedUntil: "Request limit reached. Next attempt no earlier than: %@",
             .journalOpen: "Open Usage Journal",
             .journalWriteFailed: "Could not access the journal folder or write a record. Check disk space and permissions.",
             .journalSampled: "Measured at: %@",
@@ -244,6 +249,8 @@ enum L10n {
             .credentialPermissionRequired: "Autorisation d’accès requise",
             .grantCredentialAccess: "Autoriser l’accès…",
             .lastKnownUsage: "Dernière mesure réussie (non actuelle)",
+            .rateLimitedGeneric: "Limite de requêtes atteinte. Nouvel essai ultérieur.",
+            .rateLimitedUntil: "Limite de requêtes atteinte. Prochain essai au plus tôt : %@",
             .journalOpen: "Ouvrir le journal d’utilisation",
             .journalWriteFailed: "Impossible d’accéder au journal ou d’écrire une entrée. Vérifiez l’espace disque et les autorisations.",
             .journalSampled: "Mesure effectuée à : %@",
@@ -324,6 +331,8 @@ enum L10n {
             .credentialPermissionRequired: "Se requiere permiso de acceso",
             .grantCredentialAccess: "Permitir acceso…",
             .lastKnownUsage: "Última medición correcta (no actual)",
+            .rateLimitedGeneric: "Límite de solicitudes alcanzado. Se reintentará más tarde.",
+            .rateLimitedUntil: "Límite de solicitudes alcanzado. Próximo intento no antes de: %@",
             .journalOpen: "Abrir diario de uso",
             .journalWriteFailed: "No se pudo acceder al diario o escribir una entrada. Revisa el espacio en disco y los permisos.",
             .journalSampled: "Medición realizada: %@",
