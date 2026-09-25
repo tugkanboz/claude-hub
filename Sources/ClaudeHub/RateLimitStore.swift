@@ -1,6 +1,12 @@
 import Foundation
 
 struct RateLimitStore {
+    static var profile: RateLimitStore {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ClaudeHub/ProfileRateLimits", isDirectory: true)
+        return RateLimitStore(directory: directory)
+    }
+
     private struct Entry: Codable {
         let accountID: UUID
         let retryAt: Date

@@ -9,23 +9,41 @@ actor AnthropicTransport {
     typealias Send = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let send: Send
     private let now: @Sendable () -> Date
+    private let profileCooldownStore: RateLimitStore?
     private var profiles: [UUID: (payload: ProfilePayload, fetchedAt: Date)] = [:]
+    private var profileRetryDates: [UUID: Date] = [:]
+    private var active: Set<UUID> = []
     private var generations: [UUID: UUID] = [:]
 
     init(send: @escaping Send = { try await URLSession.shared.data(for: $0) },
-         now: @escaping @Sendable () -> Date = { Date() }) {
+         now: @escaping @Sendable () -> Date = { Date() },
+         profileCooldownStore: RateLimitStore? = nil) {
         self.send = send
         self.now = now
+        self.profileCooldownStore = profileCooldownStore
     }
 
     func configure(_ accounts: [Account]) {
         let remaining = Set(accounts.map(\.id))
-        for id in generations.keys where !remaining.contains(id) { invalidate(id) }
+        for id in active.subtracting(remaining) { remove(id) }
+        for id in remaining.subtracting(active) {
+            do { profileRetryDates[id] = try profileCooldownStore?.load(for: id, now: now()) }
+            catch { AppLogger.write("[warn] Could not load profile cooldown account=\(id)") }
+        }
+        active = remaining
     }
 
     func invalidate(_ id: UUID) {
         profiles[id] = nil
         generations[id] = nil
+    }
+
+    func remove(_ id: UUID) {
+        invalidate(id)
+        active.remove(id)
+        profileRetryDates[id] = nil
+        do { try profileCooldownStore?.remove(for: id) }
+        catch { AppLogger.write("[warn] Could not remove profile cooldown account=\(id)") }
     }
 
     func snapshot(for account: Account, credential: OAuthCredential) async throws -> AccountSnapshot {
@@ -36,20 +54,37 @@ actor AnthropicTransport {
         guard generations[account.id] == generation else { throw CancellationError() }
         let measuredAt = now()
         let usage = try JSONDecoder().decode(UsagePayload.self, from: usageData)
-        let profile: ProfilePayload
+        let profile: ProfilePayload?
         if let cached = profiles[account.id], now().timeIntervalSince(cached.fetchedAt) >= 0,
            now().timeIntervalSince(cached.fetchedAt) < 21_600 {
             profile = cached.payload
+        } else if let retry = profileRetryDates[account.id], retry > now() {
+            profile = nil
         } else {
-            let profileData = try await request(.profile, token: credential.accessToken)
-            profile = try JSONDecoder().decode(ProfilePayload.self, from: profileData)
-            try Task.checkCancellation()
-            guard generations[account.id] == generation else { throw CancellationError() }
-            profiles[account.id] = (profile, now())
+            do {
+                let profileData = try await request(.profile, token: credential.accessToken)
+                let fetched = try JSONDecoder().decode(ProfilePayload.self, from: profileData)
+                try Task.checkCancellation()
+                guard generations[account.id] == generation else { throw CancellationError() }
+                profiles[account.id] = (fetched, now())
+                profileRetryDates[account.id] = nil
+                do { try profileCooldownStore?.remove(for: account.id) }
+                catch { AppLogger.write("[warn] Could not clear profile cooldown account=\(account.id)") }
+                profile = fetched
+            } catch AnthropicClientError.rateLimitResponse(.profile, let suggested) {
+                try Task.checkCancellation()
+                guard generations[account.id] == generation else { throw CancellationError() }
+                let retry = max(now().addingTimeInterval(1), suggested ?? now().addingTimeInterval(60))
+                profileRetryDates[account.id] = retry
+                do { try profileCooldownStore?.save(retry, for: account.id) }
+                catch { AppLogger.write("[warn] Could not save profile cooldown account=\(account.id)") }
+                AppLogger.write("[warn] HTTP 429 account=\(account.id) endpoint=/api/oauth/profile retryAt=\(ISO8601DateFormatter().string(from: retry))")
+                profile = nil
+            }
         }
         try Task.checkCancellation()
         guard generations[account.id] == generation else { throw CancellationError() }
-        return AccountSnapshot(email: profile.account.email, organizationID: profile.organization.uuid,
+        return AccountSnapshot(email: profile?.account.email, organizationID: profile?.organization.uuid,
             usage: usage, fetchedAt: measuredAt, refreshTokenExpiresAt: credential.refreshTokenExpiresAt)
     }
 

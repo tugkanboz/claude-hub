@@ -263,11 +263,13 @@ ClaudeHub normally fetches usage every five minutes. Profile information is
 cached in memory for six hours instead of being fetched with every usage poll.
 Reconnecting a profile or receiving HTTP 401 invalidates that profile cache.
 
-If either endpoint returns HTTP 429, requests for that account pause until the
-server's `Retry-After` time, when provided as seconds or an HTTP date. If the
-header is missing or invalid, the delay starts at about one minute and doubles
-with a small random offset, up to 30 minutes. A successful query resets this
-backoff. Other accounts and the independent token-renewal schedule continue.
+If the usage endpoint returns HTTP 429, usage requests for that account pause
+until the server's `Retry-After` time, when provided as seconds or an HTTP date.
+If the header is missing or invalid, the delay starts at about one minute and
+doubles with a small random offset, up to 30 minutes. A successful query resets
+this backoff. If only the profile metadata endpoint returns 429, the usage
+percentages can still update while profile metadata waits for its own deadline.
+Other accounts and the independent token-renewal schedule continue.
 The next regular poll at or after the deadline retries; the displayed time is
 the earliest allowed attempt, not a promise of an exact retry time.
 
@@ -275,9 +277,10 @@ the earliest allowed attempt, not a promise of an exact retry time.
 request per account, and a successful measurement can be reused for 30 seconds
 without changing its original timestamp. Reconnecting does not bypass an
 existing rate-limit wait. The profile cache and 30-second reuse are held in memory.
-The 429 retry deadline is also stored locally per account and still applies
-after restarting the app. A successful request or removing the account clears
-it; no credential or personal profile data is stored in this deadline file.
+Both 429 retry deadlines are stored locally per account and still apply after
+restarting the app. A successful request to the affected endpoint or removing
+the account clears its deadline; no credential or personal profile data is
+stored in these files.
 
 The menu shows a localized rate-limit message and the earliest retry time.
 When available, the last successful measurement remains visible, explicitly

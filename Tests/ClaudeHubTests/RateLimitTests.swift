@@ -180,21 +180,50 @@ final class RateLimitTests: XCTestCase {
         XCTAssertEqual(paths.filter { $0 == "/api/oauth/profile" }.count, 3)
     }
 
-    func test429OnEitherEndpointPreservesHeaderAndStopsFurtherRequests() async throws {
-        for endpoint in [AnthropicEndpoint.usage, .profile] {
-            let clock = RateTestClock()
-            let server = RateTestServer(limitedPath: endpoint.rawValue)
-            let transport = AnthropicTransport(send: { try await server.send($0) }, now: { clock.now })
-            do {
-                _ = try await transport.snapshot(for: account, credential: OAuthCredential(accessToken: "test", refreshToken: nil, expiresAt: 1, scopes: nil))
-                XCTFail("Expected 429")
-            } catch AnthropicClientError.rateLimitResponse(let path, let retry) {
-                XCTAssertEqual(path, endpoint)
-                XCTAssertEqual(retry, clock.now.addingTimeInterval(120))
-            }
-            let paths = await server.paths
-            XCTAssertEqual(paths.count, endpoint == .usage ? 1 : 2)
+    func testUsage429PreservesRetryAfterAndStopsProfileRequest() async throws {
+        let clock = RateTestClock()
+        let server = RateTestServer(limitedPath: AnthropicEndpoint.usage.rawValue)
+        let transport = AnthropicTransport(send: { try await server.send($0) }, now: { clock.now })
+        do {
+            _ = try await transport.snapshot(for: account, credential: OAuthCredential(accessToken: "test", refreshToken: nil, expiresAt: 1, scopes: nil))
+            XCTFail("Expected 429")
+        } catch AnthropicClientError.rateLimitResponse(let path, let retry) {
+            XCTAssertEqual(path, .usage)
+            XCTAssertEqual(retry, clock.now.addingTimeInterval(120))
         }
+        let paths = await server.paths
+        XCTAssertEqual(paths, ["/api/oauth/usage"])
+    }
+
+    func testProfile429KeepsUsageAndPersistsSeparateMetadataCooldown() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = RateTestClock()
+        let store = RateLimitStore(directory: directory)
+        let server = RateTestServer(limitedPath: AnthropicEndpoint.profile.rawValue)
+        let transport = AnthropicTransport(send: { try await server.send($0) }, now: { clock.now },
+                                           profileCooldownStore: store)
+        await transport.configure([account])
+        let credential = OAuthCredential(accessToken: "test", refreshToken: nil, expiresAt: 1, scopes: nil)
+        let first = try await transport.snapshot(for: account, credential: credential)
+        XCTAssertNil(first.email)
+        XCTAssertEqual(first.fetchedAt, clock.now)
+        _ = try await transport.snapshot(for: account, credential: credential)
+        var paths = await server.paths
+        XCTAssertEqual(paths, ["/api/oauth/usage", "/api/oauth/profile", "/api/oauth/usage"])
+
+        let recoveredServer = RateTestServer()
+        let restarted = AnthropicTransport(send: { try await recoveredServer.send($0) }, now: { clock.now },
+                                           profileCooldownStore: store)
+        await restarted.configure([account])
+        _ = try await restarted.snapshot(for: account, credential: credential)
+        paths = await recoveredServer.paths
+        XCTAssertEqual(paths, ["/api/oauth/usage"])
+        clock.advance(120)
+        _ = try await restarted.snapshot(for: account, credential: credential)
+        paths = await recoveredServer.paths
+        XCTAssertEqual(paths, ["/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"])
+        XCTAssertNil(try store.load(for: account.id, now: clock.now.addingTimeInterval(-1)))
     }
 
     func testUsageCooldownDoesNotStopScheduledTokenRenewal() async throws {
