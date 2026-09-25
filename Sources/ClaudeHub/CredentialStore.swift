@@ -138,15 +138,38 @@ actor CredentialCache {
         return CredentialStoreError.permissionRequired
     }
 
-    func authorize(for account: Account) throws {
+    func authorizationCredential(for account: Account) throws -> OAuthCredential {
+        try Task.checkCancellation()
+        do { return try interactiveLoader(account) }
+        catch {
+            logAuthorizationFailure(error, stage: "source-read", account: account)
+            throw recordPermissionFailure(error, for: account)
+        }
+    }
+
+    func completeAuthorization(_ credential: OAuthCredential, for account: Account) throws {
+        try Task.checkCancellation()
         do {
-            let credential = try interactiveLoader(account)
             if let persistence {
                 try (persistence.interactiveWrite ?? persistence.write)(credential, account)
             }
             values[account.id] = credential
             permissionRequired.remove(account.id)
-        } catch { throw recordPermissionFailure(error, for: account) }
+        } catch {
+            logAuthorizationFailure(error, stage: "hub-write", account: account)
+            throw recordPermissionFailure(error, for: account)
+        }
+    }
+
+    func authorize(for account: Account) throws {
+        try completeAuthorization(authorizationCredential(for: account), for: account)
+    }
+
+    private func logAuthorizationFailure(_ error: Error, stage: String, account: Account) {
+        let status: String
+        if case CredentialStoreError.keychain(let code) = error { status = String(code) }
+        else { status = "unavailable" }
+        AppLogger.write("[warn] Access recovery failed account=\(account.id) stage=\(stage) keychainStatus=\(status)")
     }
 
     func read(for account: Account) throws -> OAuthCredential {
