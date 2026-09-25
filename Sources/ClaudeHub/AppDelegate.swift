@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var accountStoreAvailable = true
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration = RefreshGeneration()
+    private let lastUsageStore = LastUsageStore()
     private let usageJournal = UsageJournalStore()
     private var journalSchedule: HourlyJournalSchedule?
     private var journalSamples: [UUID: AccountSnapshot] = [:]
@@ -23,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(permissionChanged(_:)), name: .credentialPermissionRequired, object: nil)
         do { accounts = try accountStore.load() } catch {
             accountStoreAvailable = false
+        }
+        for account in accounts {
+            do { lastSnapshots[account.id] = try lastUsageStore.load(for: account) }
+            catch { AppLogger.write("[warn] Could not load last usage account=\(account.id)") }
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = ""
@@ -216,6 +221,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if case .loaded(let snapshot) = state {
                         lastSnapshots[id] = snapshot
                         journalSamples[id] = snapshot
+                        if let account = accounts.first(where: { $0.id == id }) {
+                            do { try lastUsageStore.save(snapshot, for: account) }
+                            catch { AppLogger.write("[warn] Could not save last usage account=\(id)") }
+                        }
                     } else {
                         journalSamples[id] = nil
                     }
@@ -302,6 +311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionRequired.remove(id)
         journalSamples[id] = nil
         journalFailures.remove(id)
+        do { try lastUsageStore.remove(for: account) }
+        catch { AppLogger.write("[warn] Could not remove last usage account=\(id)") }
         Task {
             do { try await client.forget(account) } catch {
                 showError(L10n.text(.credentialCleanupFailed))
