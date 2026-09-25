@@ -94,7 +94,7 @@ struct AnthropicClient {
 
     func forget(_ account: Account) async throws {
         await requests.remove(account.id)
-        await transport.invalidate(account.id)
+        await transport.remove(account.id)
         try await sessions.forget(account)
     }
 
