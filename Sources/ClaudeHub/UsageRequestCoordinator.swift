@@ -27,6 +27,7 @@ actor UsageRequestCoordinator {
     typealias Operation = @Sendable () async throws -> AccountSnapshot
     private let now: @Sendable () -> Date
     private let jitter: @Sendable () -> Double
+    private let cooldownStore: RateLimitStore?
     private var active: Set<UUID> = []
     private var paused: Set<UUID> = []
     private var requests: [UUID: (id: UUID, task: Task<AccountSnapshot, Error>)] = [:]
@@ -35,14 +36,20 @@ actor UsageRequestCoordinator {
     private var recent: [UUID: (snapshot: AccountSnapshot, completedAt: Date)] = [:]
 
     init(now: @escaping @Sendable () -> Date = { Date() },
-         jitter: @escaping @Sendable () -> Double = { Double.random(in: 0...0.2) }) {
+         jitter: @escaping @Sendable () -> Double = { Double.random(in: 0...0.2) },
+         cooldownStore: RateLimitStore? = nil) {
         self.now = now
         self.jitter = jitter
+        self.cooldownStore = cooldownStore
     }
 
     func configure(_ accounts: [Account]) {
         let remaining = Set(accounts.map(\.id))
         for id in active.subtracting(remaining) { remove(id) }
+        for id in remaining.subtracting(active) {
+            do { retryDates[id] = try cooldownStore?.load(for: id, now: now()) }
+            catch { AppLogger.write("[warn] Could not load 429 cooldown account=\(id)") }
+        }
         active = remaining
     }
 
@@ -77,6 +84,8 @@ actor UsageRequestCoordinator {
             retryDates[id] = nil
             failures[id] = nil
             recent[id] = (snapshot, now())
+            do { try cooldownStore?.remove(for: id) }
+            catch { AppLogger.write("[warn] Could not clear 429 cooldown account=\(id)") }
             return snapshot
         } catch {
             guard active.contains(id), requests[id]?.id == generation else { throw CancellationError() }
@@ -97,6 +106,8 @@ actor UsageRequestCoordinator {
             let retry = suggested.map { max(date.addingTimeInterval(1), $0) }
                 ?? date.addingTimeInterval(RateLimitPolicy.delay(failures: count, jitter: jitter()))
             retryDates[id] = retry
+            do { try cooldownStore?.save(retry, for: id) }
+            catch { AppLogger.write("[warn] Could not save 429 cooldown account=\(id)") }
             AppLogger.write("[warn] HTTP 429 account=\(id) endpoint=\(endpoint) retryAt=\(ISO8601DateFormatter().string(from: retry))")
             throw AnthropicClientError.rateLimited(until: retry)
         }
@@ -119,5 +130,7 @@ actor UsageRequestCoordinator {
         retryDates[id] = nil
         failures[id] = nil
         recent[id] = nil
+        do { try cooldownStore?.remove(for: id) }
+        catch { AppLogger.write("[warn] Could not remove 429 cooldown account=\(id)") }
     }
 }

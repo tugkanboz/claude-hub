@@ -42,6 +42,47 @@ final class RateLimitTests: XCTestCase {
         _ = try await requests.snapshot(for: account) { try Self.snapshot() }
     }
 
+    func testCooldownSurvivesRestartAndClearsAfterSuccess() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = RateTestClock()
+        let store = RateLimitStore(directory: directory)
+        let deadline = clock.now.addingTimeInterval(3_600)
+        let first = UsageRequestCoordinator(now: { clock.now }, jitter: { 0 }, cooldownStore: store)
+        await first.configure([account])
+        do {
+            _ = try await first.snapshot(for: account) {
+                throw AnthropicClientError.rateLimitResponse(endpoint: .usage, retryAt: deadline)
+            }
+            XCTFail("Expected rate limit")
+        } catch AnthropicClientError.rateLimited(let date) { XCTAssertEqual(date, deadline) }
+
+        let restarted = UsageRequestCoordinator(now: { clock.now }, jitter: { 0 }, cooldownStore: store)
+        await restarted.configure([account])
+        do {
+            _ = try await restarted.snapshot(for: account) {
+                XCTFail("An app restart must not bypass the 429 deadline")
+                return try Self.snapshot()
+            }
+            XCTFail("Expected persisted rate limit")
+        } catch AnthropicClientError.rateLimited(let date) { XCTAssertEqual(date, deadline) }
+
+        clock.advance(3_600)
+        _ = try await restarted.snapshot(for: account) { try Self.snapshot() }
+        XCTAssertNil(try store.load(for: account.id, now: clock.now.addingTimeInterval(-1)))
+    }
+
+    func testRemovedAccountClearsSavedCooldown() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = RateLimitStore(directory: directory)
+        try store.save(Date().addingTimeInterval(3_600), for: account.id)
+        let requests = UsageRequestCoordinator(cooldownStore: store)
+        await requests.configure([account])
+        await requests.remove(account.id)
+        XCTAssertNil(try store.load(for: account.id, now: Date()))
+    }
+
     func testFallbackBackoffGrowsAndSuccessResetsIt() async throws {
         let clock = RateTestClock()
         let requests = UsageRequestCoordinator(now: { clock.now }, jitter: { 0 })

@@ -274,7 +274,10 @@ the earliest allowed attempt, not a promise of an exact retry time.
 **Refresh Now** respects the same deadline. Concurrent refreshes share one
 request per account, and a successful measurement can be reused for 30 seconds
 without changing its original timestamp. Reconnecting does not bypass an
-existing rate-limit wait. These caches and waits are held in memory.
+existing rate-limit wait. The profile cache and 30-second reuse are held in memory.
+The 429 retry deadline is also stored locally per account and still applies
+after restarting the app. A successful request or removing the account clears
+it; no credential or personal profile data is stored in this deadline file.
 
 The menu shows a localized rate-limit message and the earliest retry time.
 When available, the last successful measurement remains visible, explicitly
