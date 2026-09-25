@@ -85,21 +85,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch states[account.id] ?? .loading {
         case .loading:
             addDisabled(L10n.text(.loading), to: submenu)
+            addLastSnapshot(for: account, to: submenu)
         case .failed(let message):
-            if permissionRequired.contains(account.id) {
-                if let snapshot = lastSnapshots[account.id] {
-                    addDisabled(L10n.text(.lastKnownUsage), to: submenu)
-                    addSnapshot(snapshot, to: submenu)
-                }
-            } else {
+            if !permissionRequired.contains(account.id) {
                 addDisabled(L10n.format(.error, message), to: submenu)
             }
+            addLastSnapshot(for: account, to: submenu)
         case .rateLimited(let retry):
             addDisabled(AnthropicClientError.rateLimited(until: retry).localizedDescription, to: submenu)
-            if let snapshot = lastSnapshots[account.id] {
-                addDisabled(L10n.text(.lastKnownUsage), to: submenu)
-                addSnapshot(snapshot, to: submenu)
-            }
+            addLastSnapshot(for: account, to: submenu)
         case .loaded(let snapshot):
             addSnapshot(snapshot, to: submenu)
         }
@@ -111,6 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         submenu.addItem(journal)
         item.submenu = submenu
         return item
+    }
+
+    private func addLastSnapshot(for account: Account, to menu: NSMenu) {
+        guard let snapshot = lastSnapshots[account.id] else { return }
+        addDisabled(L10n.text(.lastKnownUsage), to: menu)
+        addSnapshot(snapshot, to: menu)
     }
 
     private func addSnapshot(_ snapshot: AccountSnapshot, to menu: NSMenu) {
@@ -350,7 +350,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let rawID = sender.representedObject as? String,
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id }) else { return }
-        lastSnapshots[id] = nil
         journalSamples[id] = nil
         authorizationInProgress = true
         Task {
