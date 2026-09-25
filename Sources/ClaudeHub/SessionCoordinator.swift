@@ -20,6 +20,7 @@ actor SessionCoordinator {
     private var accounts: [UUID: Account] = [:]
     private var schedules: [UUID: (generation: UUID, task: Task<Void, Never>)] = [:]
     private var renewals: [UUID: Task<OAuthCredential, Error>] = [:]
+    private var recoveries: [UUID: Task<OAuthCredential, Error>] = [:]
     private var nextAllowed: [UUID: Date] = [:]
     private var reconnecting: Set<UUID> = []
     private var failures: [UUID: Int] = [:]
@@ -37,6 +38,7 @@ actor SessionCoordinator {
         for id in self.accounts.keys where !remaining.contains(id) {
             schedules.removeValue(forKey: id)?.task.cancel()
             renewals[id]?.cancel()
+            recoveries[id]?.cancel()
             nextAllowed[id] = nil
             failures[id] = nil
         }
@@ -67,13 +69,53 @@ actor SessionCoordinator {
         schedules.removeValue(forKey: account.id)?.task.cancel()
         if let pending = renewals[account.id] { _ = await pending.result }
         guard accounts[account.id] != nil else { throw CancellationError() }
-        try await cache.authorize(for: account)
-        guard accounts[account.id] != nil else { throw CancellationError() }
-        nextAllowed[account.id] = nil
-        failures[account.id] = nil
-        let credential = try await cache.read(for: account)
-        reconnecting.remove(account.id)
-        await schedule(account, credential: credential)
+        try Task.checkCancellation()
+        let task = Task { [cache, renewAction] in
+            var stage = "source-read"
+            do {
+                var credential = try await cache.authorizationCredential(for: account)
+                try Task.checkCancellation()
+                if Double(credential.expiresAt) / 1_000 <= Date().timeIntervalSince1970 + 600 {
+                    stage = "renew"
+                    try await renewAction(account, credential)
+                    try Task.checkCancellation()
+                    stage = "renewed-source-read"
+                    credential = try await cache.authorizationCredential(for: account)
+                    guard Double(credential.expiresAt) / 1_000 > Date().timeIntervalSince1970 + 600 else {
+                        throw LoginRefreshError.failed
+                    }
+                }
+                stage = "hub-write"
+                try await cache.completeAuthorization(credential, for: account)
+                AppLogger.write("[info] Access recovery completed account=\(account.id)")
+                return credential
+            } catch {
+                AppLogger.write("[warn] Access recovery failed account=\(account.id) stage=\(stage) cancelled=\(error is CancellationError)")
+                throw error
+            }
+        }
+        recoveries[account.id] = task
+        defer { recoveries[account.id] = nil }
+        do {
+            let credential = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: { task.cancel() }
+            try Task.checkCancellation()
+            guard accounts[account.id] != nil else { throw CancellationError() }
+            nextAllowed[account.id] = nil
+            failures[account.id] = nil
+            reconnecting.remove(account.id)
+            await schedule(account, credential: credential)
+        } catch {
+            if accounts[account.id] != nil {
+                let count = (failures[account.id] ?? 0) + 1
+                failures[account.id] = count
+                nextAllowed[account.id] = Date().addingTimeInterval(RenewalPolicy.retryDelay(failures: count))
+                reconnecting.remove(account.id)
+                if let current = try? await cache.read(for: account) { await schedule(account, credential: current) }
+            }
+            throw error
+        }
     }
 
     func remember(_ credential: OAuthCredential, for account: Account) async {
@@ -85,6 +127,10 @@ actor SessionCoordinator {
         accounts[account.id] = nil
         schedules.removeValue(forKey: account.id)?.task.cancel()
         if let task = renewals[account.id] {
+            task.cancel()
+            _ = await task.result
+        }
+        if let task = recoveries[account.id] {
             task.cancel()
             _ = await task.result
         }

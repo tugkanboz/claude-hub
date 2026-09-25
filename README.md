@@ -122,8 +122,12 @@ A valid token already in memory can still fetch usage while permission is
 pending. If fetching fails, the last successful measurement is shown with its
 date and time and explicitly marked as not current. It is not written to the
 usage journal as a fresh measurement. Cancelling authorization keeps the
-account paused. Allowing access imports the latest credential and resumes its
-renewal schedule; it does not extend a revoked or expired login.
+account paused. Allowing access reads the latest credential and, if its access
+token expires within ten minutes or has already expired, completes a CLI renewal
+and imports the resulting credential before saving ClaudeHub's copy and resuming
+the schedule. Failed renewal or denied final access does not count as successful
+recovery. A revoked login still requires signing in again. This action preserves
+any usage request cooldown imposed by Anthropic.
 
 Adding or reconnecting a profile is an explicit action and may display macOS
 permission dialogs, including a separate request to update ClaudeHub's own
