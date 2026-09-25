@@ -29,7 +29,7 @@ struct AnthropicClient {
     private let transport: AnthropicTransport
 
     init(sessions: SessionCoordinator = SessionCoordinator(cache: CredentialCache(persistence: .keychain)),
-         requests: UsageRequestCoordinator = UsageRequestCoordinator(cooldownStore: RateLimitStore()),
+         requests: UsageRequestCoordinator = UsageRequestCoordinator(),
          transport: AnthropicTransport = AnthropicTransport(), fetch: Fetch? = nil) {
         self.sessions = sessions
         self.fetch = fetch

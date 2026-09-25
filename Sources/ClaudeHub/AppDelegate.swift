@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accountStore = AccountStore()
-    private let client = AnthropicClient()
+    private let client = AnthropicClient(requests: UsageRequestCoordinator(cooldownStore: RateLimitStore()))
     private var accounts: [Account] = []
     private var permissionRequired: Set<UUID> = []
     private var authorizationInProgress = false
