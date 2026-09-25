@@ -58,7 +58,7 @@ struct OAuthCredential: Codable {
     }
 }
 
-struct UsageWindow: Decodable, Equatable {
+struct UsageWindow: Codable, Equatable {
     let utilization: Double
     let resetsAt: String?
 
@@ -82,7 +82,7 @@ struct ExtraUsage: Codable, Equatable {
     }
 }
 
-struct UsagePayload: Decodable, Equatable {
+struct UsagePayload: Codable, Equatable {
     let fiveHour: UsageWindow?
     let sevenDay: UsageWindow?
     let sevenDaySonnet: UsageWindow?

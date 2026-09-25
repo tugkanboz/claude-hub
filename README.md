@@ -119,9 +119,14 @@ choose this action. Other accounts continue working. **Refresh Now** does not
 request authorization or repeatedly retry a denied Keychain read.
 
 A valid token already in memory can still fetch usage while permission is
-pending. If fetching fails, the last successful measurement is shown with its
-date and time and explicitly marked as not current. It is not written to the
-usage journal as a fresh measurement. Cancelling authorization keeps the
+pending. During refresh, rate limits, permission errors or other failures,
+the last successful measurement remains visible with its original date and
+time and is explicitly marked as not current. Reconnecting a profile does not
+erase this measurement. ClaudeHub restores the last measurement after restarting
+from a local file under Application Support if it is less than seven days old.
+This file contains the usage percentages and measurement time,
+without an email address, organization or credential. The old measurement is not
+written to the usage journal as a fresh one. Cancelling authorization keeps the
 account paused. Allowing access reads the latest credential and, if its access
 token expires within ten minutes or has already expired, completes a CLI renewal
 and imports the resulting credential before saving ClaudeHub's copy and resuming

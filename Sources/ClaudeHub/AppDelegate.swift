@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var accountStoreAvailable = true
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration = RefreshGeneration()
+    private let lastUsageStore = LastUsageStore()
     private let usageJournal = UsageJournalStore()
     private var journalSchedule: HourlyJournalSchedule?
     private var journalSamples: [UUID: AccountSnapshot] = [:]
@@ -23,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(permissionChanged(_:)), name: .credentialPermissionRequired, object: nil)
         do { accounts = try accountStore.load() } catch {
             accountStoreAvailable = false
+        }
+        for account in accounts {
+            do { lastSnapshots[account.id] = try lastUsageStore.load(for: account) }
+            catch { AppLogger.write("[warn] Could not load last usage account=\(account.id)") }
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = ""
@@ -85,21 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch states[account.id] ?? .loading {
         case .loading:
             addDisabled(L10n.text(.loading), to: submenu)
+            addLastSnapshot(for: account, to: submenu)
         case .failed(let message):
-            if permissionRequired.contains(account.id) {
-                if let snapshot = lastSnapshots[account.id] {
-                    addDisabled(L10n.text(.lastKnownUsage), to: submenu)
-                    addSnapshot(snapshot, to: submenu)
-                }
-            } else {
+            if !permissionRequired.contains(account.id) {
                 addDisabled(L10n.format(.error, message), to: submenu)
             }
+            addLastSnapshot(for: account, to: submenu)
         case .rateLimited(let retry):
             addDisabled(AnthropicClientError.rateLimited(until: retry).localizedDescription, to: submenu)
-            if let snapshot = lastSnapshots[account.id] {
-                addDisabled(L10n.text(.lastKnownUsage), to: submenu)
-                addSnapshot(snapshot, to: submenu)
-            }
+            addLastSnapshot(for: account, to: submenu)
         case .loaded(let snapshot):
             addSnapshot(snapshot, to: submenu)
         }
@@ -111,6 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         submenu.addItem(journal)
         item.submenu = submenu
         return item
+    }
+
+    private func addLastSnapshot(for account: Account, to menu: NSMenu) {
+        guard let snapshot = lastSnapshots[account.id] else { return }
+        addDisabled(L10n.text(.lastKnownUsage), to: menu)
+        addSnapshot(snapshot, to: menu)
     }
 
     private func addSnapshot(_ snapshot: AccountSnapshot, to menu: NSMenu) {
@@ -216,6 +221,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if case .loaded(let snapshot) = state {
                         lastSnapshots[id] = snapshot
                         journalSamples[id] = snapshot
+                        if let account = accounts.first(where: { $0.id == id }) {
+                            do { try lastUsageStore.save(snapshot, for: account) }
+                            catch { AppLogger.write("[warn] Could not save last usage account=\(id)") }
+                        }
                     } else {
                         journalSamples[id] = nil
                     }
@@ -302,6 +311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionRequired.remove(id)
         journalSamples[id] = nil
         journalFailures.remove(id)
+        do { try lastUsageStore.remove(for: account) }
+        catch { AppLogger.write("[warn] Could not remove last usage account=\(id)") }
         Task {
             do { try await client.forget(account) } catch {
                 showError(L10n.text(.credentialCleanupFailed))
@@ -350,7 +361,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let rawID = sender.representedObject as? String,
               let id = UUID(uuidString: rawID),
               let account = accounts.first(where: { $0.id == id }) else { return }
-        lastSnapshots[id] = nil
         journalSamples[id] = nil
         authorizationInProgress = true
         Task {
